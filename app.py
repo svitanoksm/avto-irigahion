@@ -735,7 +735,7 @@ elif menu_option == "Поливні модулі":
 
                    flow_y_min = 0
                    flow_y_max = flow_max * 1.10 if flow_max > 0 else 1
-                   )
+                   
 
                     flow_chart = (
                         alt.Chart(flow_data)
