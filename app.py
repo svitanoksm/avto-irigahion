@@ -29,15 +29,19 @@ def load_data():
     
     df = pd.DataFrame(data)
     
-    # Очистка та приведення типів числових даних (проходимося по всіх колонках циклом)
-    for col in df.columns[3:]: # Очищаємо всі числові колонки починаючи з 4-ї
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(',', '.', regex=False)
-            .str.replace(r'[^0-9.-]', '', regex=True)
-        )
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Очистка та приведення типів тільки для числових колонок за їх індексами:
+    # 3 - Витрати кВт, 4 - Потужність, 6 - Витрати куб.м., 7 - Продуктивність
+    numeric_indexes = [3, 4, 6, 7]
+    for idx in numeric_indexes:
+        if idx < len(df.columns):
+            col_name = df.columns[idx]
+            df[col_name] = (
+                df[col_name]
+                .astype(str)
+                .str.replace(',', '.', regex=False)
+                .str.replace(r'[^0-9.-]', '', regex=True)
+            )
+            df[col_name] = pd.to_numeric(df[col_name], errors="coerce")
 
     # Приведення дати та часу
     df["Дата та час"] = pd.to_datetime(df["Дата та час"], errors="coerce")
@@ -95,17 +99,16 @@ elif menu_option == "Поливні модулі":
         if df_filtered.empty:
             st.warning("Немає даних для обраного модуля.")
         else:
-            # Виводимо графіки за позиціями колонок (ігноруючи потенційні проблеми з написанням назв)
-            # Колонки: 3 - Витрати, кВт | 4 - Потужність за період | 7 - Продуктивність
+            # Виводимо графіки за правильними числовими колонками
             st.subheader("⚡ Потужність за період (кВт/год)")
             st.line_chart(
-                df_filtered.set_index("Дата та час").iloc[:, 4], # Колонка потужності
+                df_filtered.set_index("Дата та час").iloc[:, 4], # Потужність
                 use_container_width=True
             )
             
             st.subheader("🌊 Продуктивність (куб. м./год)")
             st.line_chart(
-                df_filtered.set_index("Дата та час").iloc[:, 7], # Колонка продуктивності
+                df_filtered.set_index("Дата та час").iloc[:, 7], # Продуктивність
                 use_container_width=True
             )
             
