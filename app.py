@@ -53,28 +53,43 @@ def convert_to_number(value):
     if value == "":
         return None
 
-    if value.lower() in ["none", "nan", "null", "-", "—"]:
+    if value.lower() in [
+        "none",
+        "nan",
+        "null",
+        "-",
+        "—"
+    ]:
         return None
 
     # Прибираємо пробіли
     value = value.replace(" ", "")
 
-    # Український/європейський десятковий роздільник
+    # Український / європейський десятковий роздільник
     value = value.replace(",", ".")
 
     # Залишаємо тільки цифри, крапку та мінус
     cleaned = ""
 
     for char in value:
+
         if char.isdigit() or char in ".-":
             cleaned += char
 
-    if cleaned in ["", "-", ".", "-."]:
+    if cleaned in [
+        "",
+        "-",
+        ".",
+        "-."
+    ]:
         return None
 
     try:
+
         return float(cleaned)
+
     except ValueError:
+
         return None
 
 
@@ -82,7 +97,11 @@ def convert_to_number(value):
 # ПОШУК СТОВПЦЯ
 # ============================================================
 
-def find_column(df, exact_names=None, contains=None):
+def find_column(
+    df,
+    exact_names=None,
+    contains=None
+):
     """
     Надійний пошук стовпця.
 
@@ -98,8 +117,14 @@ def find_column(df, exact_names=None, contains=None):
     # --------------------------------------------------------
 
     for name in exact_names:
+
         for col in df.columns:
-            if str(col).strip().lower() == name.strip().lower():
+
+            if (
+                str(col).strip().lower()
+                == name.strip().lower()
+            ):
+
                 return col
 
     # --------------------------------------------------------
@@ -107,10 +132,13 @@ def find_column(df, exact_names=None, contains=None):
     # --------------------------------------------------------
 
     for fragment in contains:
+
         fragment = fragment.lower()
 
         for col in df.columns:
+
             if fragment in str(col).lower():
+
                 return col
 
     return None
@@ -139,14 +167,20 @@ def load_data():
 
     client = gspread.authorize(creds)
 
-    spreadsheet = client.open(SPREADSHEET_NAME)
-    sheet = spreadsheet.worksheet(WORKSHEET_NAME)
+    spreadsheet = client.open(
+        SPREADSHEET_NAME
+    )
+
+    sheet = spreadsheet.worksheet(
+        WORKSHEET_NAME
+    )
 
     values = sheet.get_all_values(
         value_render_option="FORMATTED_VALUE"
     )
 
     if not values:
+
         return pd.DataFrame()
 
     # --------------------------------------------------------
@@ -180,6 +214,7 @@ def load_data():
     )
 
     if date_col:
+
         df["Дата та час"] = pd.to_datetime(
             df[date_col],
             errors="coerce"
@@ -200,6 +235,7 @@ def load_data():
     )
 
     if power_col:
+
         df["Потужність за період, кВт/год"] = (
             df[power_col]
             .apply(convert_to_number)
@@ -223,6 +259,7 @@ def load_data():
     )
 
     if flow_col:
+
         df["Продуктивність, куб. м./год"] = (
             df[flow_col]
             .apply(convert_to_number)
@@ -240,6 +277,7 @@ def load_data():
             "витрати" in col_lower
             and "квт" in col_lower
         ):
+
             df[col] = (
                 df[col]
                 .apply(convert_to_number)
@@ -261,6 +299,7 @@ def load_data():
                 or "м." in col_lower
             )
         ):
+
             df[col] = (
                 df[col]
                 .apply(convert_to_number)
@@ -313,8 +352,13 @@ if df.empty:
 # БОКОВЕ МЕНЮ
 # ============================================================
 
-st.sidebar.title("💧 FMS AgronomOk")
-st.sidebar.subheader("Панель управління")
+st.sidebar.title(
+    "💧 FMS AgronomOk"
+)
+
+st.sidebar.subheader(
+    "Панель управління"
+)
 
 menu_option = st.sidebar.radio(
     "Перейти до:",
@@ -339,7 +383,9 @@ for col in df.columns:
         "модуль" in col_lower
         and "зрош" in col_lower
     ):
+
         module_col = col
+
         break
 
 
@@ -355,7 +401,8 @@ if module_col:
     )
 
     modules_list = [
-        m for m in modules_list
+        m
+        for m in modules_list
         if m != "Вимкнено"
     ]
 
@@ -396,7 +443,9 @@ if menu_option == "Головна панель":
         latest.get(
             state_col,
             "Н/Д"
-        ) if state_col else "Н/Д"
+        )
+        if state_col
+        else "Н/Д"
     )
 
     # --------------------------------------------------------
@@ -420,14 +469,20 @@ if menu_option == "Головна панель":
     )
 
     water = (
-        latest.get(water_col, 0)
+        latest.get(
+            water_col,
+            0
+        )
         if water_col
         else 0
     )
 
-    water = convert_to_number(water)
+    water = convert_to_number(
+        water
+    )
 
     if water is None:
+
         water = 0
 
     col2.metric(
@@ -452,14 +507,20 @@ if menu_option == "Головна панель":
     )
 
     energy = (
-        latest.get(energy_col, 0)
+        latest.get(
+            energy_col,
+            0
+        )
         if energy_col
         else 0
     )
 
-    energy = convert_to_number(energy)
+    energy = convert_to_number(
+        energy
+    )
 
     if energy is None:
+
         energy = 0
 
     col3.metric(
@@ -476,7 +537,9 @@ if menu_option == "Головна панель":
         latest.get(
             module_col,
             "Н/Д"
-        ) if module_col else "Н/Д"
+        )
+        if module_col
+        else "Н/Д"
     )
 
     # --------------------------------------------------------
@@ -506,7 +569,10 @@ elif menu_option == "Поливні модулі":
         "Вибір модуля"
     )
 
-    if len(modules_list) > 0 and module_col:
+    if (
+        len(modules_list) > 0
+        and module_col
+    ):
 
         selected_module = st.sidebar.selectbox(
             "Оберіть зрошувальний модуль:",
@@ -572,9 +638,12 @@ elif menu_option == "Поливні модулі":
 
                 power_data[
                     power_col_name
-                ] = power_data[
-                    power_col_name
-                ].apply(convert_to_number)
+                ] = (
+                    power_data[
+                        power_col_name
+                    ]
+                    .apply(convert_to_number)
+                )
 
                 power_data = power_data.dropna(
                     subset=[
@@ -598,7 +667,9 @@ elif menu_option == "Поливні модулі":
                     )
 
                     power_chart = (
-                        alt.Chart(power_data)
+                        alt.Chart(
+                            power_data
+                        )
                         .mark_line(
                             point=True
                         )
@@ -655,7 +726,8 @@ elif menu_option == "Поливні модулі":
                 else:
 
                     st.info(
-                        "Немає числових даних для побудови графіка потужності."
+                        "Немає числових даних для побудови "
+                        "графіка потужності."
                     )
 
             else:
@@ -675,11 +747,6 @@ elif menu_option == "Поливні модулі":
             flow_col_name = (
                 "Продуктивність, куб. м./год"
             )
-            st.write("DEBUG:", df_filtered["Продуктивність, куб. м./год"].tolist()[-20:])
-
-            # -------------------------------------------------
-            # ПЕРЕВІРКА НАЯВНОСТІ СТОВПЦЯ
-            # -------------------------------------------------
 
             if (
                 flow_col_name
@@ -693,19 +760,22 @@ elif menu_option == "Поливні модулі":
                     ]
                 ].copy()
 
-                # ---------------------------------------------
+                # -------------------------------------------------
                 # ПЕРЕТВОРЕННЯ В ЧИСЛО
-                # ---------------------------------------------
+                # -------------------------------------------------
 
                 flow_data[
                     flow_col_name
-                ] = flow_data[
-                    flow_col_name
-                ].apply(convert_to_number)
+                ] = (
+                    flow_data[
+                        flow_col_name
+                    ]
+                    .apply(convert_to_number)
+                )
 
-                # ---------------------------------------------
+                # -------------------------------------------------
                 # ВИДАЛЕННЯ ПУСТИХ ЗНАЧЕНЬ
-                # ---------------------------------------------
+                # -------------------------------------------------
 
                 flow_data = flow_data.dropna(
                     subset=[
@@ -713,126 +783,130 @@ elif menu_option == "Поливні модулі":
                         flow_col_name
                     ]
                 )
-                flow_chart_data = flow_data[
-                    flow_data[flow_col_name] <= 200
-                ].copy()
-
-                flow_chart_data = flow_chart_data.rename(
-                    columns={
-                        flow_col_name: "flow"
-                    }
-                )
-
-                flow_max = flow_chart_data["flow"].max()
-
-                flow_y_min = 0
-                flow_y_max = flow_max * 1.10 if flow_max > 0 else 100
-
-                # ---------------------------------------------
-                # ПОБУДОВА ГРАФІКА
-                # ---------------------------------------------
 
                 if not flow_data.empty:
 
-                                        # Відкидаємо явно некоректні значення
-                    # продуктивності тільки для побудови графіка.
-                    # У таблиці Google Sheets вони залишаються.
+                    # -------------------------------------------------
+                    # ФІЛЬТР АНОМАЛЬНИХ ЗНАЧЕНЬ
+                    # -------------------------------------------------
+                    #
+                    # 65899.81 — явно аномальне значення.
+                    #
+                    # Воно НЕ видаляється з df_filtered,
+                    # тому залишається у детальній таблиці.
+                    #
+                    # Для графіка використовуємо тільки значення
+                    # до 200 м³/год.
+                    # -------------------------------------------------
 
                     flow_chart_data = flow_data[
-                        flow_data[flow_col_name] <= 200
+                        flow_data[
+                            flow_col_name
+                        ] <= 200
                     ].copy()
-                    flow_chart_data = flow_chart_data.rename(
-                        columns={
-                            flow_col_name: "flow"
-                        }
-                    )
-                    st.write("DEBUG 2 — дані для графіка:")
-                    st.dataframe(
-                        flow_chart_data,
-                        use_container_width=True,
-                        hide_index=True
-                    )
 
                     if not flow_chart_data.empty:
 
-                        flow_max = flow_chart_data[
-                            flow_col_name
-                        ].max()
+                        # -------------------------------------------------
+                        # ПРОСТА НАЗВА КОЛОНКИ ДЛЯ ALTAIR
+                        # -------------------------------------------------
+
+                        flow_chart_data = (
+                            flow_chart_data
+                            .rename(
+                                columns={
+                                    flow_col_name: "flow"
+                                }
+                            )
+                        )
+
+                        flow_max = (
+                            flow_chart_data[
+                                "flow"
+                            ].max()
+                        )
 
                         flow_y_min = 0
 
                         flow_y_max = (
                             flow_max * 1.10
                             if flow_max > 0
-                            else 1
+                            else 100
+                        )
+
+                        # -------------------------------------------------
+                        # ГРАФІК
+                        # -------------------------------------------------
+
+                        flow_chart = (
+                            alt.Chart(
+                                flow_chart_data
+                            )
+                            .mark_line(
+                                point=True
+                            )
+                            .encode(
+
+                                x=alt.X(
+                                    "Дата та час:T",
+                                    title="Дата та час",
+                                    axis=alt.Axis(
+                                        format="%H:%M"
+                                    )
+                                ),
+
+                                y=alt.Y(
+                                    "flow:Q",
+                                    title="м³/год",
+                                    scale=alt.Scale(
+                                        domain=[
+                                            flow_y_min,
+                                            flow_y_max
+                                        ],
+                                        nice=False
+                                    ),
+                                    axis=alt.Axis(
+                                        format=".1f"
+                                    )
+                                ),
+
+                                tooltip=[
+
+                                    alt.Tooltip(
+                                        "Дата та час:T",
+                                        title="Дата та час",
+                                        format="%d.%m.%Y %H:%M:%S"
+                                    ),
+
+                                    alt.Tooltip(
+                                        "flow:Q",
+                                        title="Продуктивність",
+                                        format=".2f"
+                                    )
+                                ]
+                            )
+                            .properties(
+                                height=400
+                            )
+                        )
+
+                        st.altair_chart(
+                            flow_chart,
+                            use_container_width=True
                         )
 
                     else:
 
-                        flow_y_min = 0
-                        flow_y_max = 100
-                   
-                    st.write("DEBUG 3 — кількість рядків:", len(flow_chart_data))
-                    st.write("DEBUG 4 — максимум:", flow_chart_data[flow_col_name].max())
-                    flow_chart = (
-                        alt.Chart(flow_chart_data)
-                        .mark_line(
-                            point=True
+                        st.info(
+                            "Немає нормальних числових даних "
+                            "для побудови графіка продуктивності."
                         )
-                        .encode(
-
-                            x=alt.X(
-                                "Дата та час:T",
-                                title="Дата та час",
-                                axis=alt.Axis(
-                                    format="%H:%M"
-                                )
-                            ),
-
-                            y=alt.Y(
-                                "flow:Q",
-                                title="м³/год",
-                                scale=alt.Scale(
-                                    domain=[
-                                        flow_y_min,
-                                        flow_y_max
-                                    ],
-                                    nice=False
-                                ),
-                                axis=alt.Axis(
-                                    format=".1f"
-                                )
-                            ),
-
-                            tooltip=[
-
-                                alt.Tooltip(
-                                    "Дата та час:T",
-                                    title="Дата та час",
-                                    format="%d.%m.%Y %H:%M:%S"
-                                ),
-
-                                alt.Tooltip(
-                                    "flow:Q",
-                                    title="Продуктивність",
-                                    format=".2f"
-                                )
-                            ]
-                        )
-                        .properties(
-                            height=400
-                        )
-                    )
-
-                    st.altair_chart(
-                        flow_chart,
-                        use_container_width=True
-                    )
 
                 else:
 
                     st.info(
-                        "Немає числових даних для побудови графіка продуктивності."
+                        "Немає числових даних "
+                        "для побудови графіка продуктивності."
                     )
 
             else:
