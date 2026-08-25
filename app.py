@@ -720,21 +720,21 @@ elif menu_option == "Поливні модулі":
 
                 if not flow_data.empty:
 
-                   flow_max = flow_data[flow_col_name].max()
+                    flow_max = flow_data[flow_col_name].max()
 
-                   # Для масштабу графіка не враховуємо явно аномальні значення.
-                   # Нормальна продуктивність свердловини знаходиться в межах приблизно 0–100 м³/год.
-                   normal_flow = flow_data[
+                    # Для масштабу графіка не враховуємо явно аномальні значення.
+                    # Нормальна продуктивність свердловини знаходиться в межах приблизно 0–100 м³/год.
+                    normal_flow = flow_data[
                        flow_data[flow_col_name] <= 200
-                   ]
+                    ]
 
-                   if not normal_flow.empty:
+                    if not normal_flow.empty:
                        flow_max = normal_flow[flow_col_name].max()
-                   else:
+                    else:
                        flow_max = 1
 
-                   flow_y_min = 0
-                   flow_y_max = flow_max * 1.10 if flow_max > 0 else 1
+                    flow_y_min = 0
+                    flow_y_max = flow_max * 1.10 if flow_max > 0 else 1
                    
 
                     flow_chart = (
