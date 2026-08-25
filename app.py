@@ -713,6 +713,20 @@ elif menu_option == "Поливні модулі":
                         flow_col_name
                     ]
                 )
+                flow_chart_data = flow_data[
+                    flow_data[flow_col_name] <= 200
+                ].copy()
+
+                flow_chart_data = flow_chart_data.rename(
+                    columns={
+                        flow_col_name: "flow"
+                    }
+                )
+
+               flow_max = flow_chart_data["flow"].max()
+
+               flow_y_min = 0
+               flow_y_max = flow_max * 1.10 if flow_max > 0 else 100
 
                 # ---------------------------------------------
                 # ПОБУДОВА ГРАФІКА
