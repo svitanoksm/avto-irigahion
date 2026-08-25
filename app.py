@@ -103,7 +103,7 @@ elif menu_option == "Поливні модулі":
                 use_container_width=True
             )
             
-            with st.exporder("Переглянути детальні дані по модулю"):
+            with st.expander("Переглянути детальні дані по модулю"):
                 st.dataframe(df_filtered, use_container_width=True)
     else:
         st.warning("Наразі не виявлено активних модулів у базі даних.")
