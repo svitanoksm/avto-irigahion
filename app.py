@@ -88,10 +88,6 @@ def load_data():
         "https://www.googleapis.com/auth/drive.readonly"
     ]
 
-    # --------------------------------------------------------
-    # Авторизація Google
-    # --------------------------------------------------------
-
     creds_dict = dict(
         st.secrets["gcp_service_account"]
     )
@@ -102,6 +98,56 @@ def load_data():
     )
 
     client = gspread.authorize(creds)
+    spreadsheet = client.open(SPREADSHEET_NAME)
+    sheet = spreadsheet.worksheet(WORKSHEET_NAME)
+
+    values = sheet.get_all_values(
+        value_render_option="FORMATTED_VALUE"
+    )
+
+    if not values:
+        return pd.DataFrame()
+
+    # Заголовки (прибираємо зайві пробіли по краях)
+    headers = [str(h).strip() for h in values[0]]
+    rows = values[1:]
+
+    df = pd.DataFrame(rows, columns=headers)
+
+    # 1. Перетворення дати
+    date_col = next((c for c in df.columns if "дата" in c.lower()), "Дата та час")
+    if date_col in df.columns:
+        df["Дата та час"] = pd.to_datetime(
+            df[date_col],
+            errors="coerce"
+        )
+
+    # 2. Гарантоване перетворення числових стовпчиків за ключовими словами
+    for col in df.columns:
+        col_lower = col.lower()
+        if "потужн" in col_lower:
+            df[col] = df[col].apply(convert_to_number)
+            # Приводимо до єдиної точної назви для зручності
+            if col != "Потужність за період, кВт/год":
+                df.rename(columns={col: "Потужність за період, кВт/год"}, inplace=True)
+                
+        elif "продуктивн" in col_lower:
+            df[col] = df[col].apply(convert_to_number)
+            if col != "Продуктивність, куб. м./год":
+                df.rename(columns={col: "Продуктивність, куб. м./год"}, inplace=True)
+                
+        elif "витрати" in col_lower and "квт" in col_lower:
+            df[col] = df[col].apply(convert_to_number)
+            
+        elif "витрати" in col_lower and ("м³" in col_lower or "куб" in col_lower or "м." in col_lower):
+            df[col] = df[col].apply(convert_to_number)
+
+    # 3. Сортування за датою
+    if "Дата та час" in df.columns:
+        df = df.sort_values(by="Дата та час")
+        df = df.reset_index(drop=True)
+
+    return df
 
     # --------------------------------------------------------
     # Відкриваємо таблицю
