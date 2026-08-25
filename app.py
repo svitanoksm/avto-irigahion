@@ -25,7 +25,7 @@ def load_data():
     client = gspread.authorize(creds)
     
     # Відкриваємо таблицю та аркуш
-    sheet = client.open("Свердловина 1").worksheet("Свердловина 1") # Замініть на реальні назви
+    sheet = client.open("Автоматизація зрошення").worksheet("Свердловина 1") # Замініть на реальні назви
     data = sheet.get_all_records()
     
     df = pd.DataFrame(data)
