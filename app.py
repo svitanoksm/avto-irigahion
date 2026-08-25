@@ -727,6 +727,12 @@ elif menu_option == "Поливні модулі":
                     flow_chart_data = flow_data[
                         flow_data[flow_col_name] <= 200
                     ].copy()
+                    st.write("DEBUG 2 — дані для графіка:")
+                    st.dataframe(
+                        flow_chart_data,
+                        use_container_width=True,
+                        hide_index=True
+                    )
 
                     if not flow_chart_data.empty:
 
@@ -747,7 +753,8 @@ elif menu_option == "Поливні модулі":
                         flow_y_min = 0
                         flow_y_max = 100
                    
-
+                    st.write("DEBUG 3 — кількість рядків:", len(flow_chart_data))
+                    st.write("DEBUG 4 — максимум:", flow_chart_data[flow_col_name].max())
                     flow_chart = (
                         alt.Chart(flow_chart_data)
                         .mark_line(
