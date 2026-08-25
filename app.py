@@ -727,6 +727,11 @@ elif menu_option == "Поливні модулі":
                     flow_chart_data = flow_data[
                         flow_data[flow_col_name] <= 200
                     ].copy()
+                    flow_chart_data = flow_chart_data.rename(
+                        columns={
+                            flow_col_name: "flow"
+                        }
+                    )
                     st.write("DEBUG 2 — дані для графіка:")
                     st.dataframe(
                         flow_chart_data,
