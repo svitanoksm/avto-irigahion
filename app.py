@@ -29,23 +29,15 @@ def load_data():
     
     df = pd.DataFrame(data)
     
-    # Очистка та приведення типів числових даних (виправлення проблеми з комами та текстом)
-    numeric_columns = [
-        "Потужність за період, кВт/год", 
-        "Продуктивність, куб. м./год", 
-        "Витрати, кВт", 
-        "Витрати, куб. м."
-    ]
-    
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(',', '.', regex=False)
-                .str.replace(r'[^0-9.-]', '', regex=True)
-            )
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Очистка та приведення типів числових даних (проходимося по всіх колонках циклом)
+    for col in df.columns[3:]: # Очищаємо всі числові колонки починаючи з 4-ї
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.replace(',', '.', regex=False)
+            .str.replace(r'[^0-9.-]', '', regex=True)
+        )
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Приведення дати та часу
     df["Дата та час"] = pd.to_datetime(df["Дата та час"], errors="coerce")
@@ -103,16 +95,17 @@ elif menu_option == "Поливні модулі":
         if df_filtered.empty:
             st.warning("Немає даних для обраного модуля.")
         else:
-            # Виводимо графіки
+            # Виводимо графіки за позиціями колонок (ігноруючи потенційні проблеми з написанням назв)
+            # Колонки: 3 - Витрати, кВт | 4 - Потужність за період | 7 - Продуктивність
             st.subheader("⚡ Потужність за період (кВт/год)")
             st.line_chart(
-                df_filtered.set_index("Дата та час")["Потужність за період, кВт/год"],
+                df_filtered.set_index("Дата та час").iloc[:, 4], # Колонка потужності
                 use_container_width=True
             )
             
             st.subheader("🌊 Продуктивність (куб. м./год)")
             st.line_chart(
-                df_filtered.set_index("Дата та час")["Продуктивність, куб. м./год"],
+                df_filtered.set_index("Дата та час").iloc[:, 7], # Колонка продуктивності
                 use_container_width=True
             )
             
