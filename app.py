@@ -723,10 +723,10 @@ elif menu_option == "Поливні модулі":
                     }
                 )
 
-               flow_max = flow_chart_data["flow"].max()
+                flow_max = flow_chart_data["flow"].max()
 
-               flow_y_min = 0
-               flow_y_max = flow_max * 1.10 if flow_max > 0 else 100
+                flow_y_min = 0
+                flow_y_max = flow_max * 1.10 if flow_max > 0 else 100
 
                 # ---------------------------------------------
                 # ПОБУДОВА ГРАФІКА
