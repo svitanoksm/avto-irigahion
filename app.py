@@ -1,7 +1,6 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-
 # Припустимо, що ваш датафрейм називається df і містить колонки:
 # 'Date' (або інший період), 'Electricity' (електроенергія), 'Water' (вода)
 
