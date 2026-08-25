@@ -29,19 +29,23 @@ def load_data():
     
     df = pd.DataFrame(data)
     
-    # Очистка та приведення типів тільки для числових колонок за їх індексами:
-    # 3 - Витрати кВт, 4 - Потужність, 6 - Витрати куб.м., 7 - Продуктивність
-    numeric_indexes = [3, 4, 6, 7]
-    for idx in numeric_indexes:
-        if idx < len(df.columns):
-            col_name = df.columns[idx]
-            df[col_name] = (
-                df[col_name]
+    # Очистка та приведення типів числових даних за назвами стовпчиків
+    numeric_columns = [
+        "Потужність за період, кВт/год", 
+        "Продуктивність, куб. м./год", 
+        "Витрати, кВт", 
+        "Витрати, куб. м."
+    ]
+    
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = (
+                df[col]
                 .astype(str)
                 .str.replace(',', '.', regex=False)
                 .str.replace(r'[^0-9.-]', '', regex=True)
             )
-            df[col_name] = pd.to_numeric(df[col_name], errors="coerce")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Приведення дати та часу
     df["Дата та час"] = pd.to_datetime(df["Дата та час"], errors="coerce")
@@ -99,16 +103,16 @@ elif menu_option == "Поливні модулі":
         if df_filtered.empty:
             st.warning("Немає даних для обраного модуля.")
         else:
-            # Виводимо графіки за правильними числовими колонками
+            # Виводимо графіки за точними назвами стовпчиків
             st.subheader("⚡ Потужність за період (кВт/год)")
             st.line_chart(
-                df_filtered.set_index("Дата та час").iloc[:, 4], # Потужність
+                df_filtered.set_index("Дата та час")["Потужність за період, кВт/год"],
                 use_container_width=True
             )
             
             st.subheader("🌊 Продуктивність (куб. м./год)")
             st.line_chart(
-                df_filtered.set_index("Дата та час").iloc[:, 7], # Продуктивність
+                df_filtered.set_index("Дата та час")["Продуктивність, куб. м./год"],
                 use_container_width=True
             )
             
