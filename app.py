@@ -749,7 +749,7 @@ elif menu_option == "Поливні модулі":
                    
 
                     flow_chart = (
-                        alt.Chart(flow_data)
+                        alt.Chart(flow_chart_data)
                         .mark_line(
                             point=True
                         )
