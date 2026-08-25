@@ -11,7 +11,6 @@ st.set_page_config(
 )
 
 # --- АВТОРИЗАЦІЯ ТА ОТРИМАННЯ ДАНИХ З GOOGLE SHEETS ---
-# Рекомендуємо зберігати креденшіали в st.secrets для безпеки
 @st.cache_data(ttl=60) # Кешування даних на 60 секунд для швидкого завантаження
 def load_data():
     SCOPES = [
@@ -19,23 +18,37 @@ def load_data():
         "https://www.googleapis.com/auth/drive.readonly"
     ]
     
-    # Підключення через secrets Streamlit (або замініть на свій локальний файл ключів)
+    # Підключення через secrets Streamlit
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
     
     # Відкриваємо таблицю та аркуш
-    sheet = client.open("Автоматизація зрошення").worksheet("Свердловина 1") # Замініть на реальні назви
+    sheet = client.open("Автоматизація зрошення").worksheet("Свердловина 1")
     data = sheet.get_all_records()
     
     df = pd.DataFrame(data)
     
-    # Приведення типів даних
-    df["Дата та час"] = pd.to_datetime(df["Дата та час"])
-    df["Потужність за період, кВт/год"] = pd.to_numeric(df["Потужність за період, кВт/год"], errors="coerce")
-    df["Продуктивність, куб. м./год"] = pd.to_numeric(df["Продуктивність, куб. м./год"], errors="coerce")
-    df["Витрати, кВт"] = pd.to_numeric(df["Витрати, кВт"], errors="coerce")
-    df["Витрати, куб. м."] = pd.to_numeric(df["Витрати, куб. м."], errors="coerce")
+    # Очистка та приведення типів числових даних (виправлення проблеми з комами та текстом)
+    numeric_columns = [
+        "Потужність за період, кВт/год", 
+        "Продуктивність, куб. м./год", 
+        "Витрати, кВт", 
+        "Витрати, куб. м."
+    ]
+    
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(',', '.', regex=False)
+                .str.replace(r'[^0-9.-]', '', regex=True)
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Приведення дати та часу
+    df["Дата та час"] = pd.to_datetime(df["Дата та час"], errors="coerce")
     
     return df
 
@@ -55,7 +68,7 @@ menu_option = st.sidebar.radio(
 )
 
 # Отримуємо список унікальних активних модулів (відкидаємо "Вимкнено", якщо потрібно)
-modules_list = df["Зрошувальний основний модуль"].dropna().unique()
+modules_list = df["Зрошувальний основний модуль"].dropna().unique() if "Зрошувальний основний модуль" in df.columns else []
 modules_list = [m for m in modules_list if m != "Вимкнено"]
 
 # --- ЛОГІКА СТОРІНОК ---
@@ -67,10 +80,10 @@ if menu_option == "Головна панель":
     if not df.empty:
         latest = df.iloc[-1]
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Стан вимикача", latest["Стан"])
-        col2.metric("Загальні витрати води", f"{latest['Витрати, куб. м.']} м³")
-        col3.metric("Загальна енергія", f"{latest['Витрати, кВт']} кВт")
-        col4.metric("Поточний модуль", latest["Зрошувальний основний модуль"])
+        col1.metric("Стан вимикача", latest.get("Стан", "Н/Д"))
+        col2.metric("Загальні витрати води", f"{latest.get('Витрати, куб. м.', 0)} м³")
+        col3.metric("Загальна енергія", f"{latest.get('Витрати, кВт', 0)} кВт")
+        col4.metric("Поточний модуль", latest.get("Зрошувальний основний модуль", "Н/Д"))
     
     st.subheader("Останні записи з таблиці")
     st.dataframe(df.tail(10), use_container_width=True)
