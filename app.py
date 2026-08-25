@@ -776,7 +776,7 @@ elif menu_option == "Поливні модулі":
                             ),
 
                             y=alt.Y(
-                                f"{flow_col_name}:Q",
+                                "flow:Q",
                                 title="м³/год",
                                 scale=alt.Scale(
                                     domain=[
@@ -799,7 +799,7 @@ elif menu_option == "Поливні модулі":
                                 ),
 
                                 alt.Tooltip(
-                                    f"{flow_col_name}:Q",
+                                    "flow:Q",
                                     title="Продуктивність",
                                     format=".2f"
                                 )
