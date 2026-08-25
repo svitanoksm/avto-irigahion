@@ -121,14 +121,6 @@ def load_data():
 
     # ========================================================
     # ОТРИМУЄМО ФОРМАТОВАНІ ЗНАЧЕННЯ
-    #
-    # Тобто саме те, що бачимо в Google Sheets:
-    #
-    # 10,75
-    # 12,16
-    # 11,82
-    #
-    # а не внутрішнє представлення числа.
     # ========================================================
 
     values = sheet.get_all_values(
@@ -139,10 +131,10 @@ def load_data():
         return pd.DataFrame()
 
     # --------------------------------------------------------
-    # Перший рядок — заголовки
+    # Перший рядок — заголовки (очищаємо від зайвих пробілів)
     # --------------------------------------------------------
 
-    headers = values[0]
+    headers = [str(h).strip() for h in values[0]]
 
     # --------------------------------------------------------
     # Решта — дані
@@ -171,27 +163,33 @@ def load_data():
         )
 
     # ========================================================
-    # ПЕРЕТВОРЕННЯ ЧИСЛОВИХ СТОВПЧИКІВ
+    # ГНУЧКИЙ ПОШУК ТА ПЕРЕТВОРЕННЯ ЧИСЛОВИХ СТОВПЧИКІВ
     # ========================================================
 
-    numeric_columns = [
+    # Шукаємо точні або схожі назви стовпчиків у таблиці
+    for col in df.columns:
+        col_lower = col.lower()
+        
+        # Перетворення потужності
+        if "потужн" in col_lower:
+            df[col] = df[col].apply(convert_to_number)
+            # Перейменовуємо для зручності у стандартну назву якщо треба
+            if col != "Потужність за період, кВт/год":
+                df.rename(columns={col: "Потужність за період, кВт/год"}, inplace=True)
 
-        "Потужність за період, кВт/год",
+        # Перетворення продуктивності
+        elif "продуктивн" in col_lower:
+            df[col] = df[col].apply(convert_to_number)
+            if col != "Продуктивність, куб. м./год":
+                df.rename(columns={col: "Продуктивність, куб. м./год"}, inplace=True)
 
-        "Продуктивність, куб. м./год",
+        # Витрати кВт
+        elif "витрати" in col_lower and "квт" in col_lower:
+            df[col] = df[col].apply(convert_to_number)
 
-        "Витрати, кВт",
-
-        "Витрати, куб. м."
-    ]
-
-    for column in numeric_columns:
-
-        if column in df.columns:
-
-            df[column] = df[column].apply(
-                convert_to_number
-            )
+        # Витрати вода (куб. м.)
+        elif "витрати" in col_lower and ("м³" in col_lower or "куб" in col_lower):
+            df[col] = df[col].apply(convert_to_number)
 
     # ========================================================
     # СОРТУВАННЯ ЗА ДАТОЮ
@@ -266,12 +264,17 @@ menu_option = st.sidebar.radio(
 # СПИСОК ПОЛИВНИХ МОДУЛІВ
 # ============================================================
 
-if "Зрошувальний основний модуль" in df.columns:
+# Знаходимо стовпчик модуля гнучко
+module_col = None
+for col in df.columns:
+    if "модуль" in col.lower() and "зрош" in col.lower():
+        module_col = col
+        break
+
+if module_col:
 
     modules_list = (
-        df[
-            "Зрошувальний основний модуль"
-        ]
+        df[module_col]
         .dropna()
         .astype(str)
         .unique()
@@ -308,27 +311,16 @@ if menu_option == "Головна панель":
 
     col1, col2, col3, col4 = st.columns(4)
 
-    # --------------------------------------------------------
     # Стан
-    # --------------------------------------------------------
-
+    state_col = next((c for c in df.columns if "стан" in c.lower()), None)
     col1.metric(
         "Стан вимикача",
-        latest.get(
-            "Стан",
-            "Н/Д"
-        )
+        latest.get(state_col, "Н/Д") if state_col else "Н/Д"
     )
 
-    # --------------------------------------------------------
     # Витрати води
-    # --------------------------------------------------------
-
-    water = latest.get(
-        "Витрати, куб. м.",
-        0
-    )
-
+    water_col = next((c for c in df.columns if "витрати" in c.lower() and ("м³" in c.lower() or "куб" in c.lower())), None)
+    water = latest.get(water_col, 0) if water_col else 0
     if pd.isna(water):
         water = 0
 
@@ -337,15 +329,9 @@ if menu_option == "Головна панель":
         f"{water:.2f} м³"
     )
 
-    # --------------------------------------------------------
     # Енергія
-    # --------------------------------------------------------
-
-    energy = latest.get(
-        "Витрати, кВт",
-        0
-    )
-
+    energy_col = next((c for c in df.columns if "витрати" in c.lower() and "квт" in c.lower()), None)
+    energy = latest.get(energy_col, 0) if energy_col else 0
     if pd.isna(energy):
         energy = 0
 
@@ -354,22 +340,13 @@ if menu_option == "Головна панель":
         f"{energy:.2f} кВт"
     )
 
-    # --------------------------------------------------------
     # Поточний модуль
-    # --------------------------------------------------------
-
     col4.metric(
         "Поточний модуль",
-        latest.get(
-            "Зрошувальний основний модуль",
-            "Н/Д"
-        )
+        latest.get(module_col, "Н/Д") if module_col else "Н/Д"
     )
 
-    # --------------------------------------------------------
     # Останні записи
-    # --------------------------------------------------------
-
     st.subheader(
         "Останні записи з таблиці"
     )
@@ -393,11 +370,7 @@ elif menu_option == "Поливні модулі":
         "Вибір модуля"
     )
 
-    # --------------------------------------------------------
-    # Є активні модулі
-    # --------------------------------------------------------
-
-    if len(modules_list) > 0:
+    if len(modules_list) > 0 and module_col:
 
         selected_module = st.sidebar.selectbox(
             "Оберіть зрошувальний модуль:",
@@ -413,23 +386,12 @@ elif menu_option == "Поливні модулі":
         # ====================================================
 
         df_filtered = df[
-            df[
-                "Зрошувальний основний модуль"
-            ].astype(str)
-            == selected_module
+            df[module_col].astype(str) == selected_module
         ].copy()
-
-        # ----------------------------------------------------
-        # Сортування
-        # ----------------------------------------------------
 
         df_filtered = df_filtered.sort_values(
             by="Дата та час"
         )
-
-        # ====================================================
-        # ЯКЩО ДАНИХ НЕМАЄ
-        # ====================================================
 
         if df_filtered.empty:
 
@@ -447,135 +409,54 @@ elif menu_option == "Поливні модулі":
                 "⚡ Потужність за період (кВт/год)"
             )
 
-            # -------------------------------------------------
-            # Готуємо дані
-            # -------------------------------------------------
+            power_col_name = "Потужність за період, кВт/год"
+            if power_col_name not in df_filtered.columns:
+                # Шукаємо альтернативу
+                power_col_name = next((c for c in df_filtered.columns if "потужн" in c.lower()), None)
 
-            power_data = df_filtered[
-                [
-                    "Дата та час",
-                    "Потужність за період, кВт/год"
-                ]
-            ].copy()
+            if power_col_name and power_col_name in df_filtered.columns:
 
-            power_data[
-                "Потужність за період, кВт/год"
-            ] = power_data[
-                "Потужність за період, кВт/год"
-            ].apply(
-                convert_to_number
-            )
-
-            power_data = power_data.dropna(
-                subset=[
-                    "Дата та час",
-                    "Потужність за період, кВт/год"
-                ]
-            )
-
-            # -------------------------------------------------
-            # Визначаємо межі Y
-            #
-            # Це додатковий захист від неправильного
-            # масштабування графіка.
-            # -------------------------------------------------
-
-            if not power_data.empty:
-
-                power_min = power_data[
-                    "Потужність за період, кВт/год"
-                ].min()
-
-                power_max = power_data[
-                    "Потужність за період, кВт/год"
-                ].max()
-
-                # Якщо мінімум > 0, починаємо з 0
-                y_min = 0
-
-                # Додаємо 10% зверху
-                if power_max > 0:
-
-                    y_max = power_max * 1.10
-
-                else:
-
-                    y_max = 1
-
-            else:
-
-                y_min = 0
-                y_max = 1
-
-            # -------------------------------------------------
-            # ГРАФІК
-            # -------------------------------------------------
-
-            power_chart = (
-                alt.Chart(power_data)
-                .mark_line(
-                    point=True
-                )
-                .encode(
-
-                    # -----------------------------------------
-                    # X
-                    # -----------------------------------------
-
-                    x=alt.X(
-                        "Дата та час:T",
-                        title="Дата та час",
-                        axis=alt.Axis(
-                            format="%H:%M"
-                        )
-                    ),
-
-                    # -----------------------------------------
-                    # Y
-                    # -----------------------------------------
-
-                    y=alt.Y(
-                        "Потужність за період, кВт/год:Q",
-                        title="кВт/год",
-                        scale=alt.Scale(
-                            domain=[
-                                y_min,
-                                y_max
-                            ],
-                            nice=False
-                        ),
-                        axis=alt.Axis(
-                            format=".1f"
-                        )
-                    ),
-
-                    # -----------------------------------------
-                    # Підказка
-                    # -----------------------------------------
-
-                    tooltip=[
-                        alt.Tooltip(
-                            "Дата та час:T",
-                            title="Дата та час",
-                            format="%d.%m.%Y %H:%M:%S"
-                        ),
-
-                        alt.Tooltip(
-                            "Потужність за період, кВт/год:Q",
-                            title="Потужність",
-                            format=".2f"
-                        )
+                power_data = df_filtered[
+                    [
+                        "Дата та час",
+                        power_col_name
                     ]
-                )
-                .properties(
-                    height=400
-                )
-            )
+                ].dropna(subset=["Дата та час", power_col_name]).copy()
 
-            st.altair_chart(
-                power_chart,
-                use_container_width=True
-            )
+                if not power_data.empty:
+
+                    power_max = power_data[power_col_name].max()
+                    y_min = 0
+                    y_max = power_max * 1.10 if power_max > 0 else 1
+
+                    power_chart = (
+                        alt.Chart(power_data)
+                        .mark_line(point=True)
+                        .encode(
+                            x=alt.X(
+                                "Дата та час:T",
+                                title="Дата та час",
+                                axis=alt.Axis(format="%H:%M")
+                            ),
+                            y=alt.Y(
+                                f"{power_col_name}:Q",
+                                title="кВт/год",
+                                scale=alt.Scale(domain=[y_min, y_max], nice=False),
+                                axis=alt.Axis(format=".1f")
+                            ),
+                            tooltip=[
+                                alt.Tooltip("Дата та час:T", title="Дата та час", format="%d.%m.%Y %H:%M:%S"),
+                                alt.Tooltip(f"{power_col_name}:Q", title="Потужність", format=".2f")
+                            ]
+                        )
+                        .properties(height=400)
+                    )
+
+                    st.altair_chart(power_chart, use_container_width=True)
+                else:
+                    st.info("Немає числових даних для побудови графіка потужності.")
+            else:
+                st.warning("Стовпчик потужності не знайдено в таблиці.")
 
 
             # =================================================
@@ -586,114 +467,53 @@ elif menu_option == "Поливні модулі":
                 "🌊 Продуктивність (куб. м./год)"
             )
 
-            flow_data = df_filtered[
-                [
-                    "Дата та час",
-                    "Продуктивність, куб. м./год"
-                ]
-            ].copy()
+            flow_col_name = "Продуктивність, куб. м./год"
+            if flow_col_name not in df_filtered.columns:
+                flow_col_name = next((c for c in df_filtered.columns if "продуктивн" in c.lower()), None)
 
-            flow_data[
-                "Продуктивність, куб. м./год"
-            ] = flow_data[
-                "Продуктивність, куб. м./год"
-            ].apply(
-                convert_to_number
-            )
+            if flow_col_name and flow_col_name in df_filtered.columns:
 
-            flow_data = flow_data.dropna(
-                subset=[
-                    "Дата та час",
-                    "Продуктивність, куб. м./год"
-                ]
-            )
-
-            # -------------------------------------------------
-            # Межі графіка продуктивності
-            # -------------------------------------------------
-
-            if not flow_data.empty:
-
-                flow_min = flow_data[
-                    "Продуктивність, куб. м./год"
-                ].min()
-
-                flow_max = flow_data[
-                    "Продуктивність, куб. м./год"
-                ].max()
-
-                flow_y_min = 0
-
-                if flow_max > 0:
-
-                    flow_y_max = flow_max * 1.10
-
-                else:
-
-                    flow_y_max = 1
-
-            else:
-
-                flow_y_min = 0
-                flow_y_max = 1
-
-            # -------------------------------------------------
-            # ГРАФІК ПРОДУКТИВНОСТІ
-            # -------------------------------------------------
-
-            flow_chart = (
-                alt.Chart(flow_data)
-                .mark_line(
-                    point=True
-                )
-                .encode(
-
-                    x=alt.X(
-                        "Дата та час:T",
-                        title="Дата та час",
-                        axis=alt.Axis(
-                            format="%H:%M"
-                        )
-                    ),
-
-                    y=alt.Y(
-                        "Продуктивність, куб. м./год:Q",
-                        title="м³/год",
-                        scale=alt.Scale(
-                            domain=[
-                                flow_y_min,
-                                flow_y_max
-                            ],
-                            nice=False
-                        ),
-                        axis=alt.Axis(
-                            format=".1f"
-                        )
-                    ),
-
-                    tooltip=[
-                        alt.Tooltip(
-                            "Дата та час:T",
-                            title="Дата та час",
-                            format="%d.%m.%Y %H:%M:%S"
-                        ),
-
-                        alt.Tooltip(
-                            "Продуктивність, куб. м./год:Q",
-                            title="Продуктивність",
-                            format=".2f"
-                        )
+                flow_data = df_filtered[
+                    [
+                        "Дата та час",
+                        flow_col_name
                     ]
-                )
-                .properties(
-                    height=400
-                )
-            )
+                ].dropna(subset=["Дата та час", flow_col_name]).copy()
 
-            st.altair_chart(
-                flow_chart,
-                use_container_width=True
-            )
+                if not flow_data.empty:
+
+                    flow_max = flow_data[flow_col_name].max()
+                    flow_y_min = 0
+                    flow_y_max = flow_max * 1.10 if flow_max > 0 else 1
+
+                    flow_chart = (
+                        alt.Chart(flow_data)
+                        .mark_line(point=True)
+                        .encode(
+                            x=alt.X(
+                                "Дата та час:T",
+                                title="Дата та час",
+                                axis=alt.Axis(format="%H:%M")
+                            ),
+                            y=alt.Y(
+                                f"{flow_col_name}:Q",
+                                title="м³/год",
+                                scale=alt.Scale(domain=[flow_y_min, flow_y_max], nice=False),
+                                axis=alt.Axis(format=".1f")
+                            ),
+                            tooltip=[
+                                alt.Tooltip("Дата та час:T", title="Дата та час", format="%d.%m.%Y %H:%M:%S"),
+                                alt.Tooltip(f"{flow_col_name}:Q", title="Продуктивність", format=".2f")
+                            ]
+                        )
+                        .properties(height=400)
+                    )
+
+                    st.altair_chart(flow_chart, use_container_width=True)
+                else:
+                    st.info("Немає числових даних для побудови графіка продуктивності.")
+            else:
+                st.warning("Стовпчик продуктивності не знайдено в таблиці.")
 
 
             # =================================================
@@ -709,53 +529,6 @@ elif menu_option == "Поливні модулі":
                     use_container_width=True,
                     hide_index=True
                 )
-
-
-            # =================================================
-            # ДІАГНОСТИКА
-            # =================================================
-
-            with st.expander(
-                "🔧 Технічна інформація"
-            ):
-
-                st.write(
-                    "Кількість записів:",
-                    len(df_filtered)
-                )
-
-                st.write(
-                    "Тип даних потужності:",
-                    df_filtered[
-                        "Потужність за період, кВт/год"
-                    ].dtype
-                )
-
-                st.write(
-                    "Мінімальна потужність:",
-                    df_filtered[
-                        "Потужність за період, кВт/год"
-                    ].min()
-                )
-
-                st.write(
-                    "Максимальна потужність:",
-                    df_filtered[
-                        "Потужність за період, кВт/год"
-                    ].max()
-                )
-
-                st.write(
-                    "Середня потужність:",
-                    df_filtered[
-                        "Потужність за період, кВт/год"
-                    ].mean()
-                )
-
-
-    # ========================================================
-    # НЕМАЄ АКТИВНИХ МОДУЛІВ
-    # ========================================================
 
     else:
 
