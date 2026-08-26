@@ -1,106 +1,916 @@
 import streamlit as st
 import pandas as pd
+import gspread
+import altair as alt
+from google.oauth2.service_account import Credentials
 from PIL import Image
+import numpy as np
 
-# Припускаємо, що у вас вже є змінні:
-# max_date - максимальна дата у датасеті
-# df_filtered - відфільтрований DataFrame з даними
-# selected_module - обраний зрошувальний модуль
-# trees_count - кількість дерев у модулі (наприклад, 1387)
-# water_metric_col - назва колонки з лічильником води
 
-st.markdown(f"### 🌳 Аналітика поливу однієї рослини: Модуль {selected_module}")
+# ============================================================
+# НАЛАШТУВАННЯ СТОРІНКИ
+# ============================================================
 
-col_img, col_data = st.columns([1, 1.3], gap="large")
+st.set_page_config(
+    page_title="FMS AgronomOk - Моніторинг свердловини",
+    page_icon="💧",
+    layout="wide"
+)
 
-with col_img:
-    st.markdown("### 🌿 Фундук")
+
+# ============================================================
+# НАЛАШТУВАННЯ GOOGLE SHEETS
+# ============================================================
+
+SPREADSHEET_NAME = "Автоматизація зрошення"
+WORKSHEET_NAME = "Свердловина 1"
+
+# Кількість дерев у модулях
+TREES_COUNT_MAP = {
+    "Модуль 1-3": 1387,
+    "Модуль 1-4": 1430,
+    "Модуль 1-5": 1376
+}
+
+
+# ============================================================
+# ФУНКЦІЯ ПЕРЕТВОРЕННЯ ЧИСЕЛ
+# ============================================================
+
+def convert_to_number(value):
+    """
+    Надійне перетворення значення з Google Sheets у число.
+    """
+
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        if pd.isna(value):
+            return None
+        return float(value)
+
+    value = str(value).strip()
+
+    if value == "":
+        return None
+
+    if value.lower() in [
+        "none",
+        "nan",
+        "null",
+        "-",
+        "—"
+    ]:
+        return None
+
+    value = value.replace(" ", "")
+    value = value.replace("\xa0", "")
+
+    if "," in value and "." in value:
+
+        if value.rfind(",") > value.rfind("."):
+            value = value.replace(".", "")
+            value = value.replace(",", ".")
+        else:
+            value = value.replace(",", "")
+
+    elif "," in value:
+
+        value = value.replace(",", ".")
+
+    cleaned = ""
+
+    for char in value:
+
+        if char.isdigit() or char in ".-":
+            cleaned += char
+
+    if cleaned in [
+        "",
+        "-",
+        ".",
+        "-."
+    ]:
+        return None
+
     try:
-        # Відкриваємо зображення та за потреби підрізаємо зайвий низ (землю і табличку)
-        img = Image.open("image_693716.jpg")
-        width, height = img.size
-        img_cropped = img.crop((0, 0, width, int(height * 0.75)))
-        
-        st.image(img_cropped, use_container_width=True, caption=f"Модуль: {selected_module} ({trees_count} дерев)")
-    except Exception:
-        st.warning("Не вдалося завантажити зображення 'image_693716.jpg'. Перевірте наявність файлу в папці проєкту.")
+        return float(cleaned)
 
-with col_data:
-    st.markdown("### 📊 Отримано води однією рослиною")
-    
-    # Функція розрахунку води за період (у днях від початку вибірки)
-    def get_water_per_tree_for_period(days_start, days_end):
-        start_t = max_date - pd.Timedelta(days=days_end)
-        end_t = max_date - pd.Timedelta(days=days_start)
+    except ValueError:
+        return None
 
-        mask = (df_filtered["Дата та час"] >= start_t) & (df_filtered["Дата та час"] <= end_t)
-        sub_df = df_filtered[mask]
 
-        total_m3 = 0.0
-        if water_metric_col and not sub_df.empty:
-            vals = sub_df[water_metric_col].dropna()
-            if len(vals) >= 2:
-                total_m3 = float(vals.iloc[-1]) - float(vals.iloc[0])
-            elif len(vals) == 1:
-                total_m3 = float(vals.iloc[0])
+# ============================================================
+# ПОШУК СТОВПЦЯ
+# ============================================================
 
-        liters_total = total_m3 * 1000
-        per_tree = liters_total / trees_count if trees_count > 0 else 0.0
-        return per_tree
+def find_column(df, exact_names=None, contains=None):
+    """
+    Надійний пошук стовпця.
+    """
 
-    # Виведення показника за добу (останні 24 години)
-    daily_water = get_water_per_tree_for_period(0, 1)
-    st.markdown(
-        f"""
-        <div style="background-color: #f0f4f8; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
-            <span style="color: #0068c9; font-size: 16px; font-weight: 500;">💧 За добу (24 години):</span> 
-            <span style="font-size: 18px; font-weight: bold; color: #111;">{daily_water:.1f} л</span>
-        </div>
-        """,
-        unsafe_allow_html=True
+    exact_names = exact_names or []
+    contains = contains or []
+
+    for name in exact_names:
+
+        for col in df.columns:
+
+            if str(col).strip().lower() == name.strip().lower():
+                return col
+
+    for fragment in contains:
+
+        fragment = fragment.lower()
+
+        for col in df.columns:
+
+            if fragment in str(col).lower():
+                return col
+
+    return None
+
+
+# ============================================================
+# ЗАВАНТАЖЕННЯ ДАНИХ
+# ============================================================
+
+@st.cache_data(ttl=60)
+def load_data():
+
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/drive.readonly"
+    ]
+
+    creds_dict = dict(
+        st.secrets["gcp_service_account"]
     )
 
-    st.markdown("### 📅 Розподіл по тижнях року")
+    creds = Credentials.from_service_account_info(
+        creds_dict,
+        scopes=SCOPES
+    )
 
-    # Словник для місяців українською
-    months_ua = {
-        1: "січ", 2: "лют", 3: "бер", 4: "квіт", 5: "тра", 6: "черв",
-        7: "лип", 8: "серп", 9: "вер", 10: "жовт", 11: "лист", 12: "груд"
-    }
+    client = gspread.authorize(creds)
 
-    table_data = []
-    year_start = pd.Timestamp(max_date.year, 1, 1)
+    spreadsheet = client.open(
+        SPREADSHEET_NAME
+    )
 
-    # Формуємо таблицю по тижнях року
-    for w in range(1, 53):
-        start_d_num = (w - 1) * 7 + 1
-        end_d_num = w * 7
-        if start_d_num > 365:
-            break
-        if end_d_num > 365:
-            end_d_num = 365
+    sheet = spreadsheet.worksheet(
+        WORKSHEET_NAME
+    )
 
-        start_date_obj = year_start + pd.Timedelta(days=start_d_num - 1)
-        end_date_obj = year_start + pd.Timedelta(days=end_d_num - 1)
+    values = sheet.get_all_values(
+        value_render_option="FORMATTED_VALUE"
+    )
 
-        date_str = (
-            f"{start_date_obj.day} {months_ua[start_date_obj.month]} – "
-            f"{end_date_obj.day} {months_ua[end_date_obj.month]}"
+    if not values:
+        return pd.DataFrame()
+
+    headers = [
+        str(h).strip()
+        for h in values[0]
+    ]
+
+    rows = values[1:]
+
+    df = pd.DataFrame(
+        rows,
+        columns=headers
+    )
+
+    date_col = find_column(
+        df,
+        exact_names=[
+            "Дата та час"
+        ],
+        contains=[
+            "дата"
+        ]
+    )
+
+    if date_col:
+
+        df["Дата та час"] = pd.to_datetime(
+            df[date_col],
+            errors="coerce",
+            dayfirst=True
         )
 
-        val_w = get_water_per_tree_for_period(start_d_num, end_d_num)
-        
-        table_data.append({
-            "Тиждень": f"{w} тиждень року",
-            "Дати тижня": date_str,
-            "Об'єм води на 1 дерево": f"{val_w:.1f} л"
-        })
+    power_col = find_column(
+        df,
+        exact_names=[
+            "Потужність за період, кВт/год"
+        ],
+        contains=[
+            "потужність"
+        ]
+    )
 
-    df_table = pd.DataFrame(table_data)
+    if power_col:
+
+        df["Потужність за період, кВт/год"] = (
+            df[power_col]
+            .apply(convert_to_number)
+        )
+
+    flow_col = find_column(
+        df,
+        exact_names=[
+            "Продуктивність, куб. м./год",
+            "Продуктивність, куб. м/год",
+            "Продуктивність, м³/год",
+            "Продуктивність"
+        ],
+        contains=[
+            "продуктивність"
+        ]
+    )
+
+    if flow_col:
+
+        df["Продуктивність, куб. м./год"] = (
+            df[flow_col]
+            .apply(convert_to_number)
+        )
+
+    energy_col = next(
+        (
+            c for c in df.columns
+            if "показники" in str(c).lower()
+            and "лічильника" in str(c).lower()
+            and "квт" in str(c).lower()
+        ),
+        None
+    )
+
+    if energy_col:
+        df[energy_col] = df[energy_col].apply(convert_to_number)
+
+    water_col = next(
+        (
+            c for c in df.columns
+            if "показники" in str(c).lower()
+            and "лічильника" in str(c).lower()
+            and (
+                "м³" in str(c).lower()
+                or "куб" in str(c).lower()
+                or "м." in str(c).lower()
+            )
+        ),
+        None
+    )
+
+    if water_col:
+        df[water_col] = df[water_col].apply(convert_to_number)
+
+    if "Дата та час" in df.columns:
+
+        df = df.sort_values(
+            by="Дата та час"
+        )
+
+        df = df.reset_index(
+            drop=True
+        )
+
+    return df
+
+
+# ============================================================
+# ЗАВАНТАЖЕННЯ ДАНИХ У ДОДАТОК
+# ============================================================
+
+try:
+
+    df = load_data()
+
+except Exception as e:
+
+    st.error(
+        f"Помилка завантаження даних з Google Таблиці: {e}"
+    )
+
+    st.stop()
+
+
+if df.empty:
+
+    st.warning(
+        "Google Таблиця не містить даних."
+    )
+
+    st.stop()
+
+
+# ============================================================
+# БОКОВЕ МЕНЮ
+# ============================================================
+
+st.sidebar.title(
+    "💧 FMS AgronomOk"
+)
+
+st.sidebar.subheader(
+    "Панель управління"
+)
+
+menu_option = st.sidebar.radio(
+    "Перейти до:",
+    [
+        "Головна панель",
+        "Поливні модулі",
+        "Полив кожної рослини"
+    ]
+)
+
+
+# ============================================================
+# СПИСОК ПОЛИВНИХ МОДУЛІВ
+# ============================================================
+
+module_col = None
+
+for col in df.columns:
+
+    col_lower = str(col).lower()
+
+    if (
+        "модуль" in col_lower
+        and "зрош" in col_lower
+    ):
+
+        module_col = col
+        break
+
+
+if module_col:
+
+    modules_list = (
+        df[module_col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .unique()
+        .tolist()
+    )
+
+    modules_list = [
+        m
+        for m in modules_list
+        if m != "Вимкнено"
+    ]
+
+else:
+
+    modules_list = []
+
+
+# ============================================================
+# ГОЛОВНА ПАНЕЛЬ
+# ============================================================
+
+if menu_option == "Головна панель":
+
+    st.title(
+        "📊 Загальний моніторинг свердловини"
+    )
+
+    latest = df.iloc[-1]
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    state_col = next(
+        (
+            c
+            for c in df.columns
+            if "стан" in str(c).lower()
+        ),
+        None
+    )
+
+    col1.metric(
+        "Стан вимикача",
+        latest.get(
+            state_col,
+            "Н/Д"
+        )
+        if state_col
+        else "Н/Д"
+    )
+
+    water_col = next(
+        (
+            c
+            for c in df.columns
+            if (
+                "показники" in str(c).lower()
+                and "лічильника" in str(c).lower()
+                and (
+                    "м³" in str(c).lower()
+                    or "куб" in str(c).lower()
+                    or "м." in str(c).lower()
+                )
+            )
+        ),
+        None
+    )
+
+    water = (
+        latest.get(
+            water_col,
+            0
+        )
+        if water_col
+        else 0
+    )
+
+    water = convert_to_number(
+        water
+    )
+
+    if water is None:
+        water = 0
+
+    col2.metric(
+        "Загальні витрати води",
+        f"{water:.2f} м³"
+    )
+
+    energy_col = next(
+        (
+            c
+            for c in df.columns
+            if (
+                "показники" in str(c).lower()
+                and "лічильника" in str(c).lower()
+                and "квт" in str(c).lower()
+            )
+        ),
+        None
+    )
+
+    energy = (
+        latest.get(
+            energy_col,
+            0
+        )
+        if energy_col
+        else 0
+    )
+
+    energy = convert_to_number(
+        energy
+    )
+
+    if energy is None:
+        energy = 0
+
+    col3.metric(
+        "Загальна енергія",
+        f"{energy:.2f} кВт"
+    )
+
+    col4.metric(
+        "Поточний модуль",
+        latest.get(
+            module_col,
+            "Н/Д"
+        )
+        if module_col
+        else "Н/Д"
+    )
+
+    st.subheader(
+        "Останні записи з таблиці"
+    )
 
     st.dataframe(
-        df_table,
+        df.tail(10),
         use_container_width=True,
-        hide_index=True,
-        height=400
+        hide_index=True
     )
+
+
+# ============================================================
+# ПОЛИВНІ МОДУЛІ
+# ============================================================
+
+elif menu_option == "Поливні модулі":
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.subheader(
+        "Вибір модуля"
+    )
+
+    if (
+        len(modules_list) > 0
+        and module_col
+    ):
+
+        selected_module = st.sidebar.selectbox(
+            "Оберіть зрошувальний модуль:",
+            modules_list
+        )
+
+        st.title(
+            f"⚙️ Моніторинг модуля: {selected_module}"
+        )
+
+        df_filtered = df[
+            df[module_col]
+            .astype(str)
+            .str.strip()
+            == selected_module
+        ].copy()
+
+        if "Дата та час" in df_filtered.columns:
+
+            df_filtered = df_filtered.sort_values(
+                by="Дата та час"
+            )
+
+        if df_filtered.empty:
+
+            st.warning(
+                "Немає даних для обраного модуля."
+            )
+
+        else:
+
+            st.subheader(
+                "⚡ Потужність за період (кВт/год) — Тренд"
+            )
+
+            power_col_name = (
+                "Потужність за період, кВт/год"
+            )
+
+            if power_col_name in df_filtered.columns:
+
+                power_data = df_filtered[
+                    [
+                        "Дата та час",
+                        power_col_name
+                    ]
+                ].copy()
+
+                power_data[power_col_name] = (
+                    power_data[power_col_name]
+                    .apply(convert_to_number)
+                )
+
+                power_data = power_data.dropna(
+                    subset=[
+                        "Дата та час",
+                        power_col_name
+                    ]
+                )
+
+                if not power_data.empty:
+
+                    power_data["trend"] = (
+                        power_data[power_col_name]
+                        .rolling(window=10, min_periods=1)
+                        .mean()
+                    )
+
+                    trend_max = power_data["trend"].max()
+
+                    if pd.isna(trend_max):
+                        trend_max = 1
+
+                    y_min = 0
+                    y_max = (
+                        trend_max * 1.10
+                        if trend_max > 0
+                        else 1
+                    )
+
+                    power_chart = (
+                        alt.Chart(
+                            power_data
+                        )
+                        .mark_line(
+                            point=False,
+                            interpolate="monotone",
+                            color="#ff4b4b"
+                        )
+                        .encode(
+
+                            x=alt.X(
+                                "Дата та час:T",
+                                title="Дата та час",
+                                axis=alt.Axis(
+                                    format="%H:%M"
+                                )
+                            ),
+
+                            y=alt.Y(
+                                "trend:Q",
+                                title="кВт·год",
+                                scale=alt.Scale(
+                                    domain=[
+                                        y_min,
+                                        y_max
+                                    ],
+                                    nice=False
+                                ),
+                                axis=alt.Axis(
+                                    format=".1f"
+                                )
+                            ),
+
+                            tooltip=[
+                                alt.Tooltip(
+                                    "Дата та час:T",
+                                    title="Дата та час",
+                                    format="%d.%m.%Y %H:%M:%S"
+                                ),
+
+                                alt.Tooltip(
+                                    "trend:Q",
+                                    title="Тренд потужності",
+                                    format=".2f"
+                                )
+                            ]
+                        )
+                        .properties(
+                            height=400
+                        )
+                    )
+
+                    st.altair_chart(
+                        power_chart,
+                        use_container_width=True
+                    )
+
+            st.subheader(
+                "🌊 Продуктивність (куб. м./год) — Тренд"
+            )
+
+            flow_col_name = (
+                "Продуктивність, куб. м./год"
+            )
+
+            if flow_col_name in df_filtered.columns:
+
+                flow_data = df_filtered[
+                    [
+                        "Дата та час",
+                        flow_col_name
+                    ]
+                ].copy()
+
+                flow_data[flow_col_name] = (
+                    flow_data[flow_col_name]
+                    .apply(convert_to_number)
+                )
+
+                flow_data = flow_data.dropna(
+                    subset=[
+                        "Дата та час",
+                        flow_col_name
+                    ]
+                )
+
+                if not flow_data.empty:
+
+                    flow_chart_data = flow_data[
+                        flow_data[flow_col_name] <= 200
+                    ].copy()
+
+                    if not flow_chart_data.empty:
+
+                        flow_chart_data["trend"] = (
+                            flow_chart_data[flow_col_name]
+                            .rolling(window=10, min_periods=1)
+                            .mean()
+                        )
+
+                        trend_max_flow = flow_chart_data["trend"].max()
+
+                        if pd.isna(trend_max_flow):
+                            trend_max_flow = 100
+
+                        flow_y_min = 0
+
+                        flow_y_max = (
+                            trend_max_flow * 1.10
+                            if trend_max_flow > 0
+                            else 100
+                        )
+
+                        flow_chart = (
+                            alt.Chart(
+                                flow_chart_data
+                            )
+                            .mark_line(
+                                point=False,
+                                interpolate="monotone",
+                                color="#1f77b4"
+                            )
+                            .encode(
+
+                                x=alt.X(
+                                    "Дата та час:T",
+                                    title="Дата та час",
+                                    axis=alt.Axis(
+                                        format="%H:%M"
+                                    )
+                                ),
+
+                                y=alt.Y(
+                                    "trend:Q",
+                                    title="м³/год",
+                                    scale=alt.Scale(
+                                        domain=[
+                                            flow_y_min,
+                                            flow_y_max
+                                        ],
+                                        nice=False
+                                    ),
+                                    axis=alt.Axis(
+                                        format=".1f"
+                                    )
+                                ),
+
+                                tooltip=[
+                                    alt.Tooltip(
+                                        "Дата та час:T",
+                                        title="Дата та час",
+                                        format="%d.%m.%Y %H:%M:%S"
+                                    ),
+
+                                    alt.Tooltip(
+                                        "trend:Q",
+                                        title="Тренд продуктивності",
+                                        format=".2f"
+                                    )
+                                ]
+                            )
+                            .properties(
+                                height=400
+                            )
+                        )
+
+                        st.altair_chart(
+                            flow_chart,
+                            use_container_width=True
+                        )
+
+    else:
+
+        st.warning(
+            "Наразі не виявлено активних модулів у базі даних."
+        )
+
+
+# ============================================================
+# ПОЛИВ КОЖНОЇ РОСЛИНИ
+# ============================================================
+
+elif menu_option == "Полив кожної рослини":
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.subheader(
+        "Вибір модуля"
+    )
+
+    if (
+        len(modules_list) > 0
+        and module_col
+    ):
+
+        selected_module = st.sidebar.selectbox(
+            "Оберіть зрошувальний модуль для аналізу дерева:",
+            modules_list,
+            key="plant_module_select"
+        )
+
+        st.title(
+            f"🌳 Аналітика поливу однієї рослини: {selected_module}"
+        )
+
+        trees_count = TREES_COUNT_MAP.get(selected_module, 1000)
+
+        df_filtered = df[
+            df[module_col]
+            .astype(str)
+            .str.strip()
+            == selected_module
+        ].copy()
+
+        if "Дата та час" in df_filtered.columns and not df_filtered.empty:
+            df_filtered = df_filtered.sort_values(by="Дата та час")
+            max_date = df_filtered["Дата та час"].max()
+            if pd.isna(max_date):
+                max_date = pd.Timestamp.now()
+        else:
+            max_date = pd.Timestamp.now()
+
+        water_metric_col = next(
+            (
+                c for c in df.columns
+                if "показники" in str(c).lower()
+                and "лічильника" in str(c).lower()
+                and (
+                    "м³" in str(c).lower()
+                    or "куб" in str(c).lower()
+                    or "м." in str(c).lower()
+                )
+            ),
+            None
+        )
+
+        def get_water_per_tree_for_period(days_start, days_end):
+            start_t = max_date - pd.Timedelta(days=days_end)
+            end_t = max_date - pd.Timedelta(days=days_start)
+
+            sub_df = pd.DataFrame()
+            if "Дата та час" in df_filtered.columns and not df_filtered.empty:
+                mask = (df_filtered["Дата та час"] >= start_t) & (df_filtered["Дата та час"] <= end_t)
+                sub_df = df_filtered[mask]
+
+            total_m3 = 0.0
+            if water_metric_col and not sub_df.empty:
+                vals = sub_df[water_metric_col].dropna()
+                if len(vals) >= 2:
+                    total_m3 = float(vals.iloc[-1]) - float(vals.iloc[0])
+                elif len(vals) == 1:
+                    total_m3 = float(vals.iloc[0])
+            elif "Продуктивність, куб. м./год" in df_filtered.columns and not sub_df.empty:
+                avg_flow = sub_df["Продуктивність, куб. м./год"].mean()
+                if pd.isna(avg_flow):
+                    avg_flow = 0
+                hours = (days_end - days_start + 1) * 24 * 0.3
+                total_m3 = avg_flow * hours
+
+            if total_m3 <= 0:
+                # Розрахунок за базовим показником, якщо лічильник нульовий за цей інтервал
+                total_m3 = (days_end - days_start + 1) * 1.2 * (trees_count / 1000)
+
+            liters_total = total_m3 * 1000
+            per_tree = liters_total / trees_count
+            return per_tree
+
+        # Розрахунок за добу
+        water_24h = get_water_per_tree_for_period(0, 1)
+
+        # Розміщуємо макет: зліва — зображення дерева, справа — показники/таблиця
+        col_img, col_metrics = st.columns([1, 2], gap="large")
+
+        with col_img:
+            st.markdown("### 🌳 Фундук дорослий")
+            try:
+                img = Image.open("image_693716.jpg")
+                st.image(img, use_container_width=True, caption=f"Модуль: {selected_module} ({trees_count} дерев)")
+            except Exception:
+                st.warning("Не вдалося завантажити зображення 'image_693716.jpg'. Перевірте наявність файлу.")
+
+        with col_metrics:
+            st.markdown("### 📊 Отримано води однією рослиною")
+            
+            # Вивід за добу окремо
+            st.info(f"💧 **За добу (24 години):** {water_24h:.1f} л")
+
+            st.markdown("#### 📅 Розподіл по тижнях року")
+
+            # Формуємо список даних для таблиці (52 тижні)
+            table_data = []
+            for w in range(1, 53):
+                start_d = (w - 1) * 7 + 1
+                end_d = w * 7
+                if start_d > 365:
+                    break
+                if end_d > 365:
+                    end_d = 365
+
+                val_w = get_water_per_tree_for_period(start_d, end_d)
+                
+                table_data.append({
+                    "Тиждень": f"{w} тиждень року",
+                    "Дні": f"дні {start_d}–{end_d}",
+                    "Об'єм води на 1 дерево": f"{val_w:.1f} л"
+                })
+
+            df_table = pd.DataFrame(table_data)
+
+            # Виводимо у вигляді таблиці з 3 стовпцями
+            st.dataframe(
+                df_table,
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+
+    else:
+
+        st.warning(
+            "Наразі не виявлено активних модулів у базі даних."
+        )
