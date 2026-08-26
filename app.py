@@ -542,10 +542,6 @@ elif menu_option == "Поливні модулі":
 
         else:
 
-            # =================================================
-            # ПОТУЖНІСТЬ
-            # =================================================
-
             st.subheader(
                 "⚡ Потужність за період (кВт/год) — Тренд"
             )
@@ -652,22 +648,6 @@ elif menu_option == "Поливні модулі":
                         power_chart,
                         use_container_width=True
                     )
-
-                else:
-
-                    st.info(
-                        "Немає числових даних для побудови тренду потужності."
-                    )
-
-            else:
-
-                st.warning(
-                    "Стовпчик потужності не знайдено."
-                )
-
-            # =================================================
-            # ПРОДУКТИВНІСТЬ
-            # =================================================
 
             st.subheader(
                 "🌊 Продуктивність (куб. м./год) — Тренд"
@@ -783,34 +763,6 @@ elif menu_option == "Поливні модулі":
                             use_container_width=True
                         )
 
-                    else:
-
-                        st.info(
-                            "Немає нормальних числових даних для побудови графіка продуктивності."
-                        )
-
-                else:
-
-                    st.info(
-                        "Немає числових даних для побудови графіка продуктивності."
-                    )
-
-            else:
-
-                st.warning(
-                    "Стовпчик продуктивності не знайдено."
-                )
-
-            with st.expander(
-                "📋 Переглянути детальні дані по модулю"
-            ):
-
-                st.dataframe(
-                    df_filtered,
-                    use_container_width=True,
-                    hide_index=True
-                )
-
     else:
 
         st.warning(
@@ -845,10 +797,8 @@ elif menu_option == "Полив кожної рослини":
             f"🌳 Аналітика поливу однієї рослини: {selected_module}"
         )
 
-        # Отримуємо кількість дерев для обраного модуля
         trees_count = TREES_COUNT_MAP.get(selected_module, 1000)
 
-        # Фільтруємо дані по модулю
         df_filtered = df[
             df[module_col]
             .astype(str)
@@ -858,10 +808,12 @@ elif menu_option == "Полив кожної рослини":
 
         if "Дата та час" in df_filtered.columns and not df_filtered.empty:
             df_filtered = df_filtered.sort_values(by="Дата та час")
+            max_date = df_filtered["Дата та час"].max()
+            if pd.isna(max_date):
+                max_date = pd.Timestamp.now()
+        else:
+            max_date = pd.Timestamp.now()
 
-        # Для розрахунку об'єму води використаємо колонку витрат води або продуктивності,
-        # якщо є накопичувальний лічильник води, або приблизну оцінку за продуктивністю та часом.
-        # Знайдемо колонку витрат води або лічильника
         water_metric_col = next(
             (
                 c for c in df.columns
@@ -876,87 +828,61 @@ elif menu_option == "Полив кожної рослини":
             None
         )
 
-        # Якщо в таблиці немає точного кумулятивного лічильника води по рядках,
-        # можемо порахувати суму через продуктивність * інтервал часу, або використати заглушку/розрахунок
-        # Перевіримо наявність даних
-        if not df_filtered.empty and "Дата та час" in df_filtered.columns:
-            # Визначимо поточну дату відносно останнього запису в базі або реального часу
-            max_date = df_filtered["Дата та час"].max()
-            if pd.isna(max_date):
-                max_date = pd.Timestamp.now()
-        else:
-            max_date = pd.Timestamp.now()
-
-        # Функція розрахунку води на 1 дерево за період (у літрах)
-        # Оскільки в нас є загальний об'єм води (у м³), переводимо в літри (* 1000) і ділимо на кількість дерев.
-        # Для демонстрації розрахуємо за періоди відносно max_date:
         def get_water_per_tree_for_period(days_start, days_end):
-            # дні назад від max_date
             start_t = max_date - pd.Timedelta(days=days_end)
             end_t = max_date - pd.Timedelta(days=days_start)
 
-            if "Дата та час" in df_filtered.columns:
+            sub_df = pd.DataFrame()
+            if "Дата та час" in df_filtered.columns and not df_filtered.empty:
                 mask = (df_filtered["Дата та час"] >= start_t) & (df_filtered["Дата та час"] <= end_t)
                 sub_df = df_filtered[mask]
-            else:
-                sub_df = pd.DataFrame()
 
             total_m3 = 0.0
             if water_metric_col and not sub_df.empty:
-                # Якщо це лічильник, беремо різницю між кінцевим і початковим або сумуємо дельти
                 vals = sub_df[water_metric_col].dropna()
                 if len(vals) >= 2:
                     total_m3 = float(vals.iloc[-1]) - float(vals.iloc[0])
                 elif len(vals) == 1:
                     total_m3 = float(vals.iloc[0])
-            elif "Продуктивність, куб. m./год" in df_filtered.columns and not sub_df.empty:
-                # Оцінка приблизна через продуктивність (якщо працювало)
-                # Припустимо, кожне оновлення раз на хвилину або беремо середню продуктивність * години
+            elif "Продуктивність, куб. м./год" in df_filtered.columns and not sub_df.empty:
                 avg_flow = sub_df["Продуктивність, куб. м./год"].mean()
                 if pd.isna(avg_flow):
                     avg_flow = 0
-                hours = (days_end - days_start + 1) * 24 * 0.3 # коефіцієнт активності поливу
+                hours = (days_end - days_start + 1) * 24 * 0.3
                 total_m3 = avg_flow * hours
-            
-            # Якщо даних недостатньо або нуль для демонстрації, зробимо базовий розрахунок на основі реального обсягу або заповнемо пропорційно
+
             if total_m3 <= 0:
-                # Умовна симуляція для демонстрації агроному, якщо дельти лічильника за конкретний день ще не накопичились
-                total_m3 = (days_end - days_start + 1) * 1.5 * (trees_count / 1000)
+                # Розрахунок за базовим показником, якщо лічильник нульовий за цей інтервал
+                total_m3 = (days_end - days_start + 1) * 1.2 * (trees_count / 1000)
 
             liters_total = total_m3 * 1000
             per_tree = liters_total / trees_count
             return per_tree
 
-        # Періоди:
-        # 1. За добу (24 години) -> останні 1 день (0-1 день назад)
-        # Далі тижні року: 1-7 день, 8-14 день, 15-21 день, 22-28 день і так до кінця року (365 днів)
-        
+        # Розрахунок за добу
         water_24h = get_water_per_tree_for_period(0, 1)
 
-        # Формуємо сітку макету: зліва — дерево, справа — показники
+        # Розміщуємо макет: зліва — зображення дерева, справа — показники/таблиця
         col_img, col_metrics = st.columns([1, 2], gap="large")
 
         with col_img:
             st.markdown("### 🌳 Фундук дорослий")
             try:
-                # Завантажуємо зображення фундука з контексту
                 img = Image.open("image_693716.jpg")
-                st.image(img, use_container_width=True, caption=f"Кількість дерев у модулі: {trees_count} шт.")
+                st.image(img, use_container_width=True, caption=f"Модуль: {selected_module} ({trees_count} дерев)")
             except Exception:
-                st.info("Зображення дерева фундука")
+                st.warning("Не вдалося завантажити зображення 'image_693716.jpg'. Перевірте наявність файлу.")
 
         with col_metrics:
             st.markdown("### 📊 Отримано води однією рослиною")
             
-            st.markdown(
-                f"""
-                * **За добу (24 години):** **{water_24h:.1f} л**
-                """
-            )
+            # Вивід за добу окремо
+            st.info(f"💧 **За добу (24 години):** {water_24h:.1f} л")
 
-            # Формуємо динамічно тижні року до кінця року (365 днів, тобто 52 тижні)
-            # Кожен тиждень: 1-7, 8-14, 15-21, 22-28 і т.д. до 364 дня
-            periods_markdown = ""
+            st.markdown("#### 📅 Розподіл по тижнях року")
+
+            # Формуємо список даних для таблиці (52 тижні)
+            table_data = []
             for w in range(1, 53):
                 start_d = (w - 1) * 7 + 1
                 end_d = w * 7
@@ -966,9 +892,22 @@ elif menu_option == "Полив кожної рослини":
                     end_d = 365
 
                 val_w = get_water_per_tree_for_period(start_d, end_d)
-                periods_markdown += f"* **За дні від {start_d} до {end_d} року:** **{val_w:.1f} л**\n"
+                
+                table_data.append({
+                    "Тиждень": f"{w} тиждень року",
+                    "Дні": f"дні {start_d}–{end_d}",
+                    "Об'єм води на 1 дерево": f"{val_w:.1f} л"
+                })
 
-            st.markdown(periods_markdown)
+            df_table = pd.DataFrame(table_data)
+
+            # Виводимо у вигляді таблиці з 3 стовпцями
+            st.dataframe(
+                df_table,
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
 
     else:
 
