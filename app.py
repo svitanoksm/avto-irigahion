@@ -284,7 +284,8 @@ def load_data():
         col_lower = str(col).lower()
 
         if (
-            "Показники лічильника" in col_lower
+            "показники" in col_lower
+            and "лічильника" in col_lower
             and "квт" in col_lower
         ):
 
@@ -292,7 +293,6 @@ def load_data():
                 df[col]
                 .apply(convert_to_number)
             )
-
     # ========================================================
     # ВИТРАТИ ВОДИ
     # ========================================================
@@ -302,7 +302,8 @@ def load_data():
         col_lower = str(col).lower()
 
         if (
-            "Показники лічильника" in col_lower
+            "показники" in col_lower
+            and "лічильника" in col_lower
             and (
                 "м³" in col_lower
                 or "куб" in col_lower
@@ -466,7 +467,8 @@ if menu_option == "Головна панель":
             c
             for c in df.columns
             if (
-                "Показники лічильника" in str(c).lower()
+                "показники" in col_lower
+            and "лічильника" in col_lower
                 and (
                     "м³" in str(c).lower()
                     or "куб" in str(c).lower()
@@ -507,7 +509,8 @@ if menu_option == "Головна панель":
             c
             for c in df.columns
             if (
-                "Показники лічильника" in str(c).lower()
+                "показники" in col_lower
+            and "лічильника" in col_lower
                 and "квт" in str(c).lower()
             )
         ),
