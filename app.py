@@ -866,7 +866,7 @@ elif menu_option == "Полив кожної рослини":
         col_img, col_metrics = st.columns([1, 2], gap="large")
 
         with col_img:
-            st.markdown("### 🌳 Фундук дорослий")
+            st.markdown("### 🌳 Фундук")
             try:
                 img = Image.open("image_693716.jpg")
                 st.image(img, use_container_width=True, caption=f"Модуль: {selected_module} ({trees_count} дерев)")
