@@ -828,39 +828,41 @@ elif menu_option == "Полив кожної рослини":
             None
         )
 
-        # Нова функція розрахунку за конкретним діапазоном дат (start_dt, end_dt)
+        # Функція розрахунку для тижнів: повертає None, якщо даних у базі немає
         def get_water_per_tree_for_dates(start_dt, end_dt):
             sub_df = pd.DataFrame()
             if "Дата та час" in df_filtered.columns and not df_filtered.empty:
-                # Включаємо весь день для кінцевої дати (до 23:59:59)
                 end_dt_full = end_dt + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
                 mask = (df_filtered["Дата та час"] >= start_dt) & (df_filtered["Дата та час"] <= end_dt_full)
                 sub_df = df_filtered[mask]
 
+            # Якщо за цей період взагалі немає записів у базі — повертаємо None
+            if sub_df.empty:
+                return None
+
             total_m3 = 0.0
             days_count = (end_dt - start_dt).days + 1
 
-            if water_metric_col and not sub_df.empty:
+            if water_metric_col:
                 vals = sub_df[water_metric_col].dropna()
                 if len(vals) >= 2:
                     total_m3 = float(vals.iloc[-1]) - float(vals.iloc[0])
                 elif len(vals) == 1:
                     total_m3 = float(vals.iloc[0])
-            elif "Продуктивність, куб. м./год" in df_filtered.columns and not sub_df.empty:
+            elif "Продуктивність, куб. м./год" in df_filtered.columns:
                 avg_flow = sub_df["Продуктивність, куб. м./год"].mean()
-                if pd.isna(avg_flow):
-                    avg_flow = 0
-                hours = days_count * 24 * 0.3
-                total_m3 = avg_flow * hours
+                if pd.notna(avg_flow) and avg_flow > 0:
+                    hours = days_count * 24 * 0.3
+                    total_m3 = avg_flow * hours
 
             if total_m3 <= 0:
-                total_m3 = days_count * 1.2 * (trees_count / 1000)
+                return None
 
             liters_total = total_m3 * 1000
             per_tree = liters_total / trees_count
             return per_tree
 
-        # Зберігаємо старий метод для розрахунку за добу (останні 24 години від max_date)
+        # Зберігаємо розрахунок за добу (останні 24 години)
         def get_water_per_tree_for_period(days_start, days_end):
             start_t = max_date - pd.Timedelta(days=days_end)
             end_t = max_date - pd.Timedelta(days=days_start)
@@ -888,7 +890,6 @@ elif menu_option == "Полив кожної рослини":
 
             return (total_m3 * 1000) / trees_count
 
-        # Розрахунок за добу залишається правильним
         water_24h = get_water_per_tree_for_period(0, 1)
 
         # Розміщуємо макет: зліва — зображення дерева, справа — показники/таблиця
@@ -905,24 +906,20 @@ elif menu_option == "Полив кожної рослини":
         with col_metrics:
             st.markdown("### 📊 Отримано води однією рослиною")
             
-            # Вивід за добу окремо
             st.info(f"💧 **За добу (24 години):** {water_24h:.1f} л")
 
             st.markdown("#### 📅 Розподіл по тижнях року")
 
-            # Словник для місяців українською
             months_ua = {
                 1: "січ", 2: "лют", 3: "бер", 4: "квіт", 5: "тра", 6: "черв",
                 7: "лип", 8: "серп", 9: "вер", 10: "жовт", 11: "лист", 12: "груд"
             }
 
             table_data = []
-            
-            # Визначаємо рік на основі max_date (або поточний)
             current_year = max_date.year if not pd.isna(max_date) else 2026
             year_start = pd.Timestamp(current_year, 1, 1)
 
-            # 1-й тиждень: з 1 січня по 4 січня (тут 4 дні: чт, пт, сб, нд)
+            # 1-й тиждень
             w1_start = year_start
             w1_end = pd.Timestamp(current_year, 1, 4)
             val_w1 = get_water_per_tree_for_dates(w1_start, w1_end)
@@ -930,20 +927,18 @@ elif menu_option == "Полив кожної рослини":
             table_data.append({
                 "Тиждень": "1 тиждень року",
                 "Дати тижня": "1 січ – 4 січ",
-                "Об'єм води на 1 дерево": f"{val_w1:.1f} л"
+                "Об'єм води на 1 дерево": f"{val_w1:.1f} л" if val_w1 is not None else "-"
             })
 
-            # Починаючи з 2-го тижня — класичні тижні з понеділка (5 січня) по неділю
+            # Решта тижнів
             current_monday = pd.Timestamp(current_year, 1, 5)
 
             for w in range(2, 53):
                 current_sunday = current_monday + pd.Timedelta(days=6)
                 
-                # Якщо початок тижня вже виходить за межі року — зупиняємось
                 if current_monday > pd.Timestamp(current_year, 12, 31):
                     break
 
-                # Якщо неділя виходить за межі року, обмежуємо її 31 грудня
                 if current_sunday > pd.Timestamp(current_year, 12, 31):
                     current_sunday = pd.Timestamp(current_year, 12, 31)
 
@@ -957,15 +952,13 @@ elif menu_option == "Полив кожної рослини":
                 table_data.append({
                     "Тиждень": f"{w} тиждень року",
                     "Дати тижня": date_str,
-                    "Об'єм води на 1 дерево": f"{val_w:.1f} л"
+                    "Об'єм води на 1 дерево": f"{val_w:.1f} л" if val_w is not None else "-"
                 })
 
-                # Переходимо до наступного понеділка
                 current_monday = current_sunday + pd.Timedelta(days=1)
 
             df_table = pd.DataFrame(table_data)
 
-            # Виводимо у вигляді таблиці
             st.dataframe(
                 df_table,
                 use_container_width=True,
