@@ -620,7 +620,7 @@ elif menu_option == "Поливні модулі":
         else:
 
             # =================================================
-            # ПОТУЖНІСТЬ (ЛИШЕ ЛІНІЯ ТРЕНДУ / КОВЗНЕ СЕРЕДНЄ)
+            # ПОТУЖНІСТЬ (ЛІНІЯ ТРЕНДУ / КОВЗНЕ СЕРЕДНЄ)
             # =================================================
 
             st.subheader(
@@ -654,11 +654,6 @@ elif menu_option == "Поливні модулі":
 
                 if not power_data.empty:
 
-                    # ------------------------------------------------
-                    # РОЗРАХУНОК КОВЗНОГО СЕРЕДНЬОГО (ТРЕНДУ)
-                    # window=10 можна змінити для більшого/меншого згладжування
-                    # ------------------------------------------------
-
                     power_data["trend"] = (
                         power_data[power_col_name]
                         .rolling(window=10, min_periods=1)
@@ -676,10 +671,6 @@ elif menu_option == "Поливні модулі":
                         if trend_max > 0
                         else 1
                     )
-
-                    # ------------------------------------------------
-                    # ГРАФІК ЛІНІЇ ТРЕНДУ (ЧЕРВОНИЙ КОЛІР)
-                    # ------------------------------------------------
 
                     power_chart = (
                         alt.Chart(
@@ -753,11 +744,11 @@ elif menu_option == "Поливні модулі":
                 )
 
             # =================================================
-            # ПРОДУКТИВНІСТЬ
+            # ПРОДУКТИВНІСТЬ (ЛІНІЯ ТРЕНДУ / КОВЗНЕ СЕРЕДНЄ) — СИНІЙ КОЛІР
             # =================================================
 
             st.subheader(
-                "🌊 Продуктивність (куб. м./год)"
+                "🌊 Продуктивність (куб. м./год) — Тренд"
             )
 
             flow_col_name = (
@@ -793,27 +784,26 @@ elif menu_option == "Поливні модулі":
 
                     if not flow_chart_data.empty:
 
-                        flow_chart_data = (
-                            flow_chart_data
-                            .rename(
-                                columns={
-                                    flow_col_name: "flow"
-                                }
-                            )
+                        # ------------------------------------------------
+                        # РОЗРАХУНОК КОВЗНОГО СЕРЕДНЬОГО (ТРЕНДУ)
+                        # ------------------------------------------------
+
+                        flow_chart_data["trend"] = (
+                            flow_chart_data[flow_col_name]
+                            .rolling(window=10, min_periods=1)
+                            .mean()
                         )
 
-                        flow_max = (
-                            flow_chart_data["flow"].max()
-                        )
+                        trend_max_flow = flow_chart_data["trend"].max()
 
-                        if pd.isna(flow_max):
-                            flow_max = 100
+                        if pd.isna(trend_max_flow):
+                            trend_max_flow = 100
 
                         flow_y_min = 0
 
                         flow_y_max = (
-                            flow_max * 1.10
-                            if flow_max > 0
+                            trend_max_flow * 1.10
+                            if trend_max_flow > 0
                             else 100
                         )
 
@@ -822,7 +812,9 @@ elif menu_option == "Поливні модулі":
                                 flow_chart_data
                             )
                             .mark_line(
-                                point=True
+                                point=False,
+                                interpolate="monotone",
+                                color="#1f77b4"  # Синій колір тренду
                             )
                             .encode(
 
@@ -835,7 +827,7 @@ elif menu_option == "Поливні модулі":
                                 ),
 
                                 y=alt.Y(
-                                    "flow:Q",
+                                    "trend:Q",
                                     title="м³/год",
                                     scale=alt.Scale(
                                         domain=[
@@ -857,8 +849,8 @@ elif menu_option == "Поливні модулі":
                                     ),
 
                                     alt.Tooltip(
-                                        "flow:Q",
-                                        title="Продуктивність",
+                                        "trend:Q",
+                                        title="Тренд продуктивності",
                                         format=".2f"
                                     )
                                 ]
