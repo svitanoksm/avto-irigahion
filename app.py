@@ -828,20 +828,23 @@ elif menu_option == "Полив кожної рослини":
             None
         )
 
-        # Функція розрахунку для тижнів: повертає None, якщо даних у базі немає
-        def get_water_per_tree_for_dates(start_dt, end_dt):
+        # Універсальна функція розрахунку для конкретного року та діапазону дат
+        def get_water_per_tree_for_year_dates(target_year, start_dt, end_dt):
+            # Коригуємо дати під цільовий рік
+            s_dt = start_dt.replace(year=target_year)
+            e_dt = end_dt.replace(year=target_year)
+
             sub_df = pd.DataFrame()
             if "Дата та час" in df_filtered.columns and not df_filtered.empty:
-                end_dt_full = end_dt + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-                mask = (df_filtered["Дата та час"] >= start_dt) & (df_filtered["Дата та час"] <= end_dt_full)
+                e_dt_full = e_dt + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+                mask = (df_filtered["Дата та час"] >= s_dt) & (df_filtered["Дата та час"] <= e_dt_full)
                 sub_df = df_filtered[mask]
 
-            # Якщо за цей період взагалі немає записів у базі — повертаємо None
             if sub_df.empty:
                 return None
 
             total_m3 = 0.0
-            days_count = (end_dt - start_dt).days + 1
+            days_count = (e_dt - s_dt).days + 1
 
             if water_metric_col:
                 vals = sub_df[water_metric_col].dropna()
@@ -908,7 +911,7 @@ elif menu_option == "Полив кожної рослини":
             
             st.info(f"💧 **За добу (24 години):** {water_24h:.1f} л")
 
-            st.markdown("#### 📅 Розподіл по тижнях року")
+            st.markdown("#### 📅 Розподіл по тижнях року (поточний та 2 попередні роки)")
 
             months_ua = {
                 1: "січ", 2: "лют", 3: "бер", 4: "квіт", 5: "тра", 6: "черв",
@@ -917,42 +920,55 @@ elif menu_option == "Полив кожної рослини":
 
             table_data = []
             current_year = max_date.year if not pd.isna(max_date) else 2026
-            year_start = pd.Timestamp(current_year, 1, 1)
+            y_curr = current_year
+            y_prev1 = current_year - 1
+            y_prev2 = current_year - 2
+
+            year_start = pd.Timestamp(y_curr, 1, 1)
 
             # 1-й тиждень
             w1_start = year_start
-            w1_end = pd.Timestamp(current_year, 1, 4)
-            val_w1 = get_water_per_tree_for_dates(w1_start, w1_end)
+            w1_end = pd.Timestamp(y_curr, 1, 4)
+
+            val_w1_curr = get_water_per_tree_for_year_dates(y_curr, w1_start, w1_end)
+            val_w1_p1 = get_water_per_tree_for_year_dates(y_prev1, w1_start, w1_end)
+            val_w1_p2 = get_water_per_tree_for_year_dates(y_prev2, w1_start, w1_end)
 
             table_data.append({
                 "Тиждень": "1 тиждень року",
                 "Дати тижня": "1 січ – 4 січ",
-                "Об'єм води на 1 дерево": f"{val_w1:.1f} л" if val_w1 is not None else "-"
+                f"{y_prev2}": f"{val_w1_p2:.1f} л" if val_w1_p2 is not None else "-",
+                f"{y_prev1}": f"{val_w1_p1:.1f} л" if val_w1_p1 is not None else "-",
+                f"{y_curr} (поточний)": f"{val_w1_curr:.1f} л" if val_w1_curr is not None else "-"
             })
 
             # Решта тижнів
-            current_monday = pd.Timestamp(current_year, 1, 5)
+            current_monday = pd.Timestamp(y_curr, 1, 5)
 
             for w in range(2, 53):
                 current_sunday = current_monday + pd.Timedelta(days=6)
                 
-                if current_monday > pd.Timestamp(current_year, 12, 31):
+                if current_monday > pd.Timestamp(y_curr, 12, 31):
                     break
 
-                if current_sunday > pd.Timestamp(current_year, 12, 31):
-                    current_sunday = pd.Timestamp(current_year, 12, 31)
+                if current_sunday > pd.Timestamp(y_curr, 12, 31):
+                    current_sunday = pd.Timestamp(y_curr, 12, 31)
 
                 date_str = (
                     f"{current_monday.day} {months_ua[current_monday.month]} – "
                     f"{current_sunday.day} {months_ua[current_sunday.month]}"
                 )
 
-                val_w = get_water_per_tree_for_dates(current_monday, current_sunday)
+                val_curr = get_water_per_tree_for_year_dates(y_curr, current_monday, current_sunday)
+                val_p1 = get_water_per_tree_for_year_dates(y_prev1, current_monday, current_sunday)
+                val_p2 = get_water_per_tree_for_year_dates(y_prev2, current_monday, current_sunday)
                 
                 table_data.append({
                     "Тиждень": f"{w} тиждень року",
                     "Дати тижня": date_str,
-                    "Об'єм води на 1 дерево": f"{val_w:.1f} л" if val_w is not None else "-"
+                    f"{y_prev2}": f"{val_p2:.1f} л" if val_p2 is not None else "-",
+                    f"{y_prev1}": f"{val_p1:.1f} л" if val_p1 is not None else "-",
+                    f"{y_curr} (поточний)": f"{val_curr:.1f} л" if val_curr is not None else "-"
                 })
 
                 current_monday = current_sunday + pd.Timedelta(days=1)
