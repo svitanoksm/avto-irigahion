@@ -852,7 +852,6 @@ elif menu_option == "Полив кожної рослини":
                 total_m3 = avg_flow * hours
 
             if total_m3 <= 0:
-                # Розрахунок за базовим показником, якщо лічильник нульовий за цей інтервал
                 total_m3 = (days_end - days_start + 1) * 1.2 * (trees_count / 1000)
 
             liters_total = total_m3 * 1000
@@ -866,7 +865,7 @@ elif menu_option == "Полив кожної рослини":
         col_img, col_metrics = st.columns([1, 2], gap="large")
 
         with col_img:
-            st.markdown("### 🌳 Фундук")
+            st.markdown("### 🌿 Фундук")
             try:
                 img = Image.open("image_693716.jpg")
                 st.image(img, use_container_width=True, caption=f"Модуль: {selected_module} ({trees_count} дерев)")
@@ -890,16 +889,24 @@ elif menu_option == "Полив кожної рослини":
             table_data = []
             year_start = pd.Timestamp(max_date.year, 1, 1)
 
-            # Формуємо список даних для таблиці (52 тижні з датами)
-            for w in range(1, 53):
-                start_d = (w - 1) * 7 + 1
-                end_d = w * 7
+            # 1-й тиждень: з 1 січня (день 1) по неділю 4 січня (день 4)
+            table_data.append({
+                "Тиждень": "1 тиждень року",
+                "Дати тижня": "1 січ – 4 січ",
+                "Об'єм води на 1 дерево": f"{get_water_per_tree_for_period(1, 4):.1f} л"
+            })
+
+            # Починаючи з 2-го тижня — стандартні цикли по 7 днів (з понеділка по неділю)
+            # 5 січня (день 5) — це понеділок
+            for w in range(2, 53):
+                start_d = 5 + (w - 2) * 7
+                end_d = start_d + 6
+                
                 if start_d > 365:
                     break
                 if end_d > 365:
                     end_d = 365
 
-                # Вираховуємо реальні дати від початку року
                 start_date_obj = year_start + pd.Timedelta(days=start_d - 1)
                 end_date_obj = year_start + pd.Timedelta(days=end_d - 1)
 
@@ -918,7 +925,7 @@ elif menu_option == "Полив кожної рослини":
 
             df_table = pd.DataFrame(table_data)
 
-            # Виводимо у вигляді таблиці з 3 стовпцями
+            # Виводимо у вигляді таблиці
             st.dataframe(
                 df_table,
                 use_container_width=True,
