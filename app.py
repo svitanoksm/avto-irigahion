@@ -881,8 +881,16 @@ elif menu_option == "Полив кожної рослини":
 
             st.markdown("#### 📅 Розподіл по тижнях року")
 
-            # Формуємо список даних для таблиці (52 тижні)
+            # Словник для місяців українською
+            months_ua = {
+                1: "січ", 2: "лют", 3: "бер", 4: "квіт", 5: "тра", 6: "черв",
+                7: "лип", 8: "серп", 9: "вер", 10: "жовт", 11: "лист", 12: "груд"
+            }
+
             table_data = []
+            year_start = pd.Timestamp(max_date.year, 1, 1)
+
+            # Формуємо список даних для таблиці (52 тижні з датами)
             for w in range(1, 53):
                 start_d = (w - 1) * 7 + 1
                 end_d = w * 7
@@ -891,11 +899,20 @@ elif menu_option == "Полив кожної рослини":
                 if end_d > 365:
                     end_d = 365
 
+                # Вираховуємо реальні дати від початку року
+                start_date_obj = year_start + pd.Timedelta(days=start_d - 1)
+                end_date_obj = year_start + pd.Timedelta(days=end_d - 1)
+
+                date_str = (
+                    f"{start_date_obj.day} {months_ua[start_date_obj.month]} – "
+                    f"{end_date_obj.day} {months_ua[end_date_obj.month]}"
+                )
+
                 val_w = get_water_per_tree_for_period(start_d, end_d)
                 
                 table_data.append({
                     "Тиждень": f"{w} тиждень року",
-                    "Дні": f"дні {start_d}–{end_d}",
+                    "Дати тижня": date_str,
                     "Об'єм води на 1 дерево": f"{val_w:.1f} л"
                 })
 
