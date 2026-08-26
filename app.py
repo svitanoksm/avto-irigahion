@@ -276,45 +276,42 @@ def load_data():
         )
 
     # ========================================================
-    # ВИТРАТИ КВТ
+    # ПОКАЗНИКИ ЛІЧИЛЬНИКА ЕНЕРГІЇ (КВТ)
     # ========================================================
 
-    for col in list(df.columns):
+    energy_col = next(
+        (
+            c for c in df.columns
+            if "показники" in str(c).lower()
+            and "лічильника" in str(c).lower()
+            and "квт" in str(c).lower()
+        ),
+        None
+    )
 
-        col_lower = str(col).lower()
+    if energy_col:
+        df[energy_col] = df[energy_col].apply(convert_to_number)
 
-        if (
-            "показники" in col_lower
-            and "лічильника" in col_lower
-            and "квт" in col_lower
-        ):
-
-            df[col] = (
-                df[col]
-                .apply(convert_to_number)
-            )
     # ========================================================
-    # ВИТРАТИ ВОДИ
+    # ПОКАЗНИКИ ЛІЧИЛЬНИКА ВОДИ
     # ========================================================
 
-    for col in list(df.columns):
-
-        col_lower = str(col).lower()
-
-        if (
-            "показники" in col_lower
-            and "лічильника" in col_lower
+    water_col = next(
+        (
+            c for c in df.columns
+            if "показники" in str(c).lower()
+            and "лічильника" in str(c).lower()
             and (
-                "м³" in col_lower
-                or "куб" in col_lower
-                or "м." in col_lower
+                "м³" in str(c).lower()
+                or "куб" in str(c).lower()
+                or "м." in str(c).lower()
             )
-        ):
+        ),
+        None
+    )
 
-            df[col] = (
-                df[col]
-                .apply(convert_to_number)
-            )
+    if water_col:
+        df[water_col] = df[water_col].apply(convert_to_number)
 
     # ========================================================
     # СОРТУВАННЯ
@@ -467,8 +464,8 @@ if menu_option == "Головна панель":
             c
             for c in df.columns
             if (
-                "показники" in col_lower
-            and "лічильника" in col_lower
+                "показники" in str(c).lower()
+                and "лічильника" in str(c).lower()
                 and (
                     "м³" in str(c).lower()
                     or "куб" in str(c).lower()
@@ -509,8 +506,8 @@ if menu_option == "Головна панель":
             c
             for c in df.columns
             if (
-                "показники" in col_lower
-            and "лічильника" in col_lower
+                "показники" in str(c).lower()
+                and "лічильника" in str(c).lower()
                 and "квт" in str(c).lower()
             )
         ),
@@ -756,7 +753,7 @@ elif menu_option == "Поливні модулі":
                 )
 
             # =================================================
-            # ПРОДУКТИВНІСТЬ (НЕ ЧІПАЛИ)
+            # ПРОДУКТИВНІСТЬ
             # =================================================
 
             st.subheader(
