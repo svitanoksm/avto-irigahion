@@ -590,7 +590,7 @@ if power_col_name in df_filtered.columns:
                         use_container_width=True
                     )
 
-           # ----------------------------------------------------
+            # ----------------------------------------------------
             # 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ (БЕЗ ВИКИДІВ)
             # ----------------------------------------------------
             st.subheader(
@@ -604,7 +604,7 @@ if power_col_name in df_filtered.columns:
                     and "лічильника" in str(c).lower()
                     and "квт" in str(c).lower()
                 ),
-                None
+                None,
             )
 
             if energy_col_name and "Дата та час" in df_filtered.columns:
@@ -625,7 +625,7 @@ if power_col_name in df_filtered.columns:
                                 
                                 vals = group[energy_col_name].values
                                 times = group["Дата та час"].values
-                                 
+                                
                                 for i in range(1, len(vals)):
                                     d_en = vals[i] - vals[i-1]
                                     d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i-1])
@@ -657,23 +657,23 @@ if power_col_name in df_filtered.columns:
 
                         if not hourly_energy.empty:
                             energy_bar_chart = (
-                            alt.Chart(hourly_energy)
-                            .mark_bar(color="#ff9999", size=60)
-                            .encode(
-                                # Виводимо тільки години під кожним стовпцем
-                                x=alt.X(
-                                    "Година:T", 
-                                    title="Година (дата вказана в підказці)", 
-                                    axis=alt.Axis(format="%H:%M", labelAngle=0)
-                                ),
-                                y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
-                                tooltip=[
-                                    alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
-                                    alt.Tooltip("Витрачена електроенергія:Q", title="Прогноз на повну год, кВт·год", format=".2f")
-                                ]
+                                alt.Chart(hourly_energy)
+                                .mark_bar(color="#ff9999", size=60)
+                                .encode(
+                                    # Виводимо тільки години під кожним стовпцем
+                                    x=alt.X(
+                                        "Година:T", 
+                                        title="Година (дата вказана в підказці)", 
+                                        axis=alt.Axis(format="%H:%M", labelAngle=0)
+                                    ),
+                                    y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
+                                    tooltip=[
+                                        alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
+                                        alt.Tooltip("Витрачена електроенергія:Q", title="Прогноз на повну год, кВт·год", format=".2f")
+                                    ]
+                                )
+                                .properties(height=350)
                             )
-                            .properties(height=350)
-                        )
                             st.altair_chart(energy_bar_chart, use_container_width=True)
                     except Exception as err:
                         st.info(f"Не вдалося побудувати погодинний графік електроенергії: {err}")
