@@ -492,440 +492,270 @@ st.subheader("⚡ Потужність за період (кВт/год) — Т�
 power_col_name = "Потужність за період, кВт/год"
 
 if power_col_name in df_filtered.columns:
+    power_data = df_filtered[["Дата та час", power_col_name]].copy()
+    power_data[power_col_name] = power_data[power_col_name].apply(convert_to_number)
+    power_data = power_data.dropna(subset=["Дата та час", power_col_name])
 
-                power_data = df_filtered[
-                    [
-                        "Дата та час",
-                        power_col_name
-                    ]
-                ].copy()
+    if not power_data.empty:
+        power_data["trend"] = power_data[power_col_name].rolling(window=10, min_periods=1).mean()
+        trend_max = power_data["trend"].max()
+        if pd.isna(trend_max):
+            trend_max = 1
 
-                power_data[power_col_name] = (
-                    power_data[power_col_name]
-                    .apply(convert_to_number)
-                )
+        y_min = 0
+        y_max = trend_max * 1.10 if trend_max > 0 else 1
 
-                power_data = power_data.dropna(
-                    subset=[
-                        "Дата та час",
-                        power_col_name
-                    ]
-                )
-
-                if not power_data.empty:
-
-                    power_data["trend"] = (
-                        power_data[power_col_name]
-                        .rolling(window=10, min_periods=1)
-                        .mean()
-                    )
-
-                    trend_max = power_data["trend"].max()
-
-                    if pd.isna(trend_max):
-                        trend_max = 1
-
-                    y_min = 0
-                    y_max = (
-                        trend_max * 1.10
-                        if trend_max > 0
-                        else 1
-                    )
-
-                    power_chart = (
-                        alt.Chart(
-                            power_data
-                        )
-                        .mark_line(
-                            point=False,
-                            interpolate="monotone",
-                            color="#ff4b4b"
-                        )
-                        .encode(
-
-                            x=alt.X(
-                                "Дата та час:T",
-                                title="Дата та час",
-                                axis=alt.Axis(
-                                    format="%H:%M"
-                                )
-                            ),
-
-                            y=alt.Y(
-                                "trend:Q",
-                                title="кВт·год",
-                                scale=alt.Scale(
-                                    domain=[
-                                        y_min,
-                                        y_max
-                                    ],
-                                    nice=False
-                                ),
-                                axis=alt.Axis(
-                                    format=".1f"
-                                )
-                            ),
-
-                            tooltip=[
-                                alt.Tooltip(
-                                    "Дата та час:T",
-                                    title="Дата та час",
-                                    format="%d.%m.%Y %H:%M:%S"
-                                ),
-
-                                alt.Tooltip(
-                                    "trend:Q",
-                                    title="Тренд потужності",
-                                    format=".2f"
-                                )
-                            ]
-                        )
-                        .properties(
-                            height=400
-                        )
-                    )
-
-                    st.altair_chart(
-                        power_chart,
-                        use_container_width=True
-                    )
-
-            # ----------------------------------------------------
-            # 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ (БЕЗ ВИКИДІВ)
-            # ----------------------------------------------------
-            st.subheader(
-                "📊 Використана електроенергія за кожну годину (кВт·год) — Перераховано на 60 хв"
-            )
-
-            energy_col_name = next(
-                (
-                    c for c in df_filtered.columns
-                    if "показники" in str(c).lower()
-                    and "лічильника" in str(c).lower()
-                    and "квт" in str(c).lower()
+        power_chart = (
+            alt.Chart(power_data)
+            .mark_line(point=False, interpolate="monotone", color="#ff4b4b")
+            .encode(
+                x=alt.X("Дата та час:T", title="Дата та час", axis=alt.Axis(format="%H:%M")),
+                y=alt.Y(
+                    "trend:Q",
+                    title="кВт·год",
+                    scale=alt.Scale(domain=[y_min, y_max], nice=False),
+                    axis=alt.Axis(format=".1f"),
                 ),
-                None,
+                tooltip=[
+                    alt.Tooltip("Дата та час:T", title="Дата та час", format="%d.%m.%Y %H:%M:%S"),
+                    alt.Tooltip("trend:Q", title="Тренд потужності", format=".2f"),
+                ],
             )
+            .properties(height=400)
+        )
 
-            if energy_col_name and "Дата та час" in df_filtered.columns:
-                en_df = df_filtered[["Дата та час", energy_col_name]].copy()
-                en_df[energy_col_name] = en_df[energy_col_name].apply(convert_to_number)
-                en_df = en_df.dropna(subset=["Дата та час", energy_col_name])
+        st.altair_chart(power_chart, use_container_width=True)
 
-                if not en_df.empty:
-                    try:
-                        en_df["Година"] = en_df["Дата та час"].dt.floor("h")
-                        
-                        hourly_energy_list = []
-                        for hour_val, group in en_df.groupby("Година"):
-                            group = group.sort_values(by="Дата та час")
-                            if len(group) >= 2:
-                                total_delta_energy = 0.0
-                                total_duration_mins = 0.0
-                                
-                                vals = group[energy_col_name].values
-                                times = group["Дата та час"].values
-                                
-                                for i in range(1, len(vals)):
-                                    d_en = vals[i] - vals[i-1]
-                                    d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i-1])
-                                    d_mins = d_time.total_seconds() / 60.0
-                                    
-                                    # Жорсткий фільтр: дельта не може бути від'ємною або перевищувати 30 кВт за короткий проміжок
-                                    if 0 <= d_en < 30 and 0 < d_mins < 60:
-                                        total_delta_energy += d_en
-                                        total_duration_mins += d_mins
-                                        
-                                if total_duration_mins > 0:
-                                    adjusted_energy = total_delta_energy * (60.0 / total_duration_mins)
-                                    # Додатковий запобіжник на випадок аномального перерахунку повної години (> 100 кВт/год на годину)
-                                    if adjusted_energy < 150:
-                                        hourly_energy_list.append({
-                                            "Година": hour_val,
-                                            "Витрачена електроенергія": adjusted_energy
-                                        })
-                            elif len(group) == 1:
-                                val = float(group[energy_col_name].iloc[0])
-                                # Якщо це не абсолютне значення лічильника (яке > 150), а вже дельта
-                                if val < 50:
-                                    hourly_energy_list.append({
-                                        "Година": hour_val,
-                                        "Витрачена електроенергія": val
-                                    })
-                        
-                        hourly_energy = pd.DataFrame(hourly_energy_list)
+# ----------------------------------------------------
+# 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ
+# ----------------------------------------------------
+st.subheader("📊 Використана електроенергія за кожну годину (кВт·год) — Перераховано на 60 хв")
 
-                        if not hourly_energy.empty:
-                            energy_bar_chart = (
-                                alt.Chart(hourly_energy)
-                                .mark_bar(color="#ff9999", size=60)
-                                .encode(
-                                    # Виводимо тільки години під кожним стовпцем
-                                    x=alt.X(
-                                        "Година:T", 
-                                        title="Година (дата вказана в підказці)", 
-                                        axis=alt.Axis(format="%H:%M", labelAngle=0)
-                                    ),
-                                    y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
-                                    tooltip=[
-                                        alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
-                                        alt.Tooltip("Витрачена електроенергія:Q", title="Прогноз на повну год, кВт·год", format=".2f")
-                                    ]
-                                )
-                                .properties(height=350)
-                            )
-                            st.altair_chart(energy_bar_chart, use_container_width=True)
-                    except Exception as err:
-                        st.info(f"Не вдалося побудувати погодинний графік електроенергії: {err}")
-                else:
-                    st.info("Недостатньо даних для побудови погодинного графіка електроенергії.")
-            else:
-                st.info("Стовпець показників лічильника електроенергії не знайдено.")
-            # ----------------------------------------------------
-            # 3. ТРЕНД ПРОДУКТИВНОСТІ
-            # ----------------------------------------------------
-            st.subheader(
-                "🌊 Продуктивність (куб. м./год) — Тренд"
-            )
+energy_col_name = next(
+    (
+        c for c in df_filtered.columns
+        if "показники" in str(c).lower()
+        and "лічильника" in str(c).lower()
+        and "квт" in str(c).lower()
+    ),
+    None,
+)
 
-            flow_col_name = (
-                "Продуктивність, куб. м./год"
-            )
+if energy_col_name and "Дата та час" in df_filtered.columns:
+    en_df = df_filtered[["Дата та час", energy_col_name]].copy()
+    en_df[energy_col_name] = en_df[energy_col_name].apply(convert_to_number)
+    en_df = en_df.dropna(subset=["Дата та час", energy_col_name])
 
-            if flow_col_name in df_filtered.columns:
+    if not en_df.empty:
+        try:
+            en_df["Година"] = en_df["Дата та час"].dt.floor("h")
+            hourly_energy_list = []
 
-                flow_data = df_filtered[
-                    [
-                        "Дата та час",
-                        flow_col_name
-                    ]
-                ].copy()
+            for hour_val, group in en_df.groupby("Година"):
+                group = group.sort_values(by="Дата та час")
+                if len(group) >= 2:
+                    total_delta_energy = 0.0
+                    total_duration_mins = 0.0
+                    vals = group[energy_col_name].values
+                    times = group["Дата та час"].values
 
-                flow_data[flow_col_name] = (
-                    flow_data[flow_col_name]
-                    .apply(convert_to_number)
-                )
+                    for i in range(1, len(vals)):
+                        d_en = vals[i] - vals[i - 1]
+                        d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i - 1])
+                        d_mins = d_time.total_seconds() / 60.0
 
-                flow_data = flow_data.dropna(
-                    subset=[
-                        "Дата та час",
-                        flow_col_name
-                    ]
-                )
+                        if 0 <= d_en < 30 and 0 < d_mins < 60:
+                            total_delta_energy += d_en
+                            total_duration_mins += d_mins
 
-                if not flow_data.empty:
+                    if total_duration_mins > 0:
+                        adjusted_energy = total_delta_energy * (60.0 / total_duration_mins)
+                        if adjusted_energy < 150:
+                            hourly_energy_list.append({
+                                "Година": hour_val,
+                                "Витрачена електроенергія": adjusted_energy,
+                            })
+                elif len(group) == 1:
+                    val = float(group[energy_col_name].iloc[0])
+                    if val < 50:
+                        hourly_energy_list.append({
+                            "Година": hour_val,
+                            "Витрачена електроенергія": val,
+                        })
 
-                    flow_chart_data = flow_data[
-                        flow_data[flow_col_name] <= 200
-                    ].copy()
+            hourly_energy = pd.DataFrame(hourly_energy_list)
 
-                    if not flow_chart_data.empty:
-
-                        flow_chart_data["trend"] = (
-                            flow_chart_data[flow_col_name]
-                            .rolling(window=10, min_periods=1)
-                            .mean()
-                        )
-
-                        trend_max_flow = flow_chart_data["trend"].max()
-
-                        if pd.isna(trend_max_flow):
-                            trend_max_flow = 100
-
-                        flow_y_min = 0
-
-                        flow_y_max = (
-                            trend_max_flow * 1.10
-                            if trend_max_flow > 0
-                            else 100
-                        )
-
-                        flow_chart = (
-                            alt.Chart(
-                                flow_chart_data
-                            )
-                            .mark_line(
-                                point=False,
-                                interpolate="monotone",
-                                color="#1f77b4"
-                            )
-                            .encode(
-
-                                x=alt.X(
-                                    "Дата та час:T",
-                                    title="Дата та час",
-                                    axis=alt.Axis(
-                                        format="%H:%M"
-                                    )
-                                ),
-
-                                y=alt.Y(
-                                    "trend:Q",
-                                    title="м³/год",
-                                    scale=alt.Scale(
-                                        domain=[
-                                            flow_y_min,
-                                            flow_y_max
-                                        ],
-                                        nice=False
-                                    ),
-                                    axis=alt.Axis(
-                                        format=".1f"
-                                    )
-                                ),
-
-                                tooltip=[
-                                    alt.Tooltip(
-                                        "Дата та час:T",
-                                        title="Дата та час",
-                                        format="%d.%m.%Y %H:%M:%S"
-                                    ),
-
-                                    alt.Tooltip(
-                                        "trend:Q",
-                                        title="Тренд продуктивності",
-                                        format=".2f"
-                                    )
-                                ]
-                            )
-                            .properties(
-                                height=400
-                            )
-                        )
-
-                        st.altair_chart(
-                            flow_chart,
-                            use_container_width=True
-                        )
-
-           # ----------------------------------------------------
-            # 4. СТОВПЧАТИЙ ГРАФІК: ВИКОРИСТАНА ВОДА ЗА ГОДИНУ (БЕЗ ВИКИДІВ)
-            # ----------------------------------------------------
-            st.subheader(
-                "📊 Використана вода за кожну годину (м³) — Перераховано на 60 хв"
-            )
-
-            water_metric_col = next(
-                (
-                    c for c in df_filtered.columns
-                    if "показники" in str(c).lower()
-                    and "лічильника" in str(c).lower()
-                    and (
-                        "м³" in str(c).lower()
-                        or "куб" in str(c).lower()
-                        or "м." in str(c).lower()
+            if not hourly_energy.empty:
+                energy_bar_chart = (
+                    alt.Chart(hourly_energy)
+                    .mark_bar(color="#ff9999", size=60)
+                    .encode(
+                        x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%H:%M", labelAngle=0)),
+                        y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
+                        tooltip=[
+                            alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
+                            alt.Tooltip("Витрачена електроенергія:Q", title="Прогноз на повну год, кВт·год", format=".2f"),
+                        ],
                     )
-                ),
-                None
+                    .properties(height=350)
+                )
+                st.altair_chart(energy_bar_chart, use_container_width=True)
+            else:
+                st.info("Недостатньо даних для побудови погодинного графіка електроенергії.")
+        except Exception as err:
+            st.info(f"Не вдалося побудувати погодинний графік електроенергії: {err}")
+    else:
+        st.info("Недостатньо даних для побудови погодинного графіка електроенергії.")
+else:
+    st.info("Стовпець показників лічильника електроенергії не знайдено.")
+
+# ----------------------------------------------------
+# 3. ТРЕНД ПРОДУКТИВНОСТІ
+# ----------------------------------------------------
+st.subheader("🌊 Продуктивність (куб. м./год) — Тренд")
+
+flow_col_name = "Продуктивність, куб. м./год"
+
+if flow_col_name in df_filtered.columns:
+    flow_data = df_filtered[["Дата та час", flow_col_name]].copy()
+    flow_data[flow_col_name] = flow_data[flow_col_name].apply(convert_to_number)
+    flow_data = flow_data.dropna(subset=["Дата та час", flow_col_name])
+
+    if not flow_data.empty:
+        flow_chart_data = flow_data[flow_data[flow_col_name] <= 200].copy()
+
+        if not flow_chart_data.empty:
+            flow_chart_data["trend"] = flow_chart_data[flow_col_name].rolling(window=10, min_periods=1).mean()
+            trend_max_flow = flow_chart_data["trend"].max()
+            if pd.isna(trend_max_flow):
+                trend_max_flow = 100
+
+            flow_y_min = 0
+            flow_y_max = trend_max_flow * 1.10 if trend_max_flow > 0 else 100
+
+            flow_chart = (
+                alt.Chart(flow_chart_data)
+                .mark_line(point=False, interpolate="monotone", color="#1f77b4")
+                .encode(
+                    x=alt.X("Дата та час:T", title="Дата та час", axis=alt.Axis(format="%H:%M")),
+                    y=alt.Y(
+                        "trend:Q",
+                        title="м³/год",
+                        scale=alt.Scale(domain=[flow_y_min, flow_y_max], nice=False),
+                        axis=alt.Axis(format=".1f"),
+                    ),
+                    tooltip=[
+                        alt.Tooltip("Дата та час:T", title="Дата та час", format="%d.%m.%Y %H:%M:%S"),
+                        alt.Tooltip("trend:Q", title="Тренд продуктивності", format=".2f"),
+                    ],
+                )
+                .properties(height=400)
             )
 
-            if water_metric_col and "Дата та час" in df_filtered.columns:
-                wat_df = df_filtered[["Дата та час", water_metric_col]].copy()
-                wat_df[water_metric_col] = wat_df[water_metric_col].apply(convert_to_number)
-                wat_df = wat_df.dropna(subset=["Дата та час", water_metric_col])
+            st.altair_chart(flow_chart, use_container_width=True)
 
-                if not wat_df.empty:
-                    try:
-                        wat_df["Година"] = wat_df["Дата та час"].dt.floor("h")
-                        
-                        hourly_water_list = []
-                        for hour_val, group in wat_df.groupby("Година"):
-                            group = group.sort_values(by="Дата та час")
-                            if len(group) >= 2:
-                                total_delta_water = 0.0
-                                total_duration_mins = 0.0
-                                
-                                vals = group[water_metric_col].values
-                                times = group["Дата та час"].values
-                                
-                                for i in range(1, len(vals)):
-                                    d_wat = vals[i] - vals[i-1]
-                                    d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i-1])
-                                    d_mins = d_time.total_seconds() / 60.0
-                                    
-                                    # Захисний фільтр для води (дельта за короткий проміжок)
-                                    if 0 <= d_wat < 50 and 0 < d_mins < 60:
-                                        total_delta_water += d_wat
-                                        total_duration_mins += d_mins
-                                        
-                                if total_duration_mins > 0:
-                                    adjusted_water = total_delta_water * (60.0 / total_duration_mins)
-                                    if adjusted_water < 200:
-                                        hourly_water_list.append({
-                                            "Година": hour_val,
-                                            "Витрачена вода": adjusted_water
-                                        })
-                            elif len(group) == 1:
-                                val = float(group[water_metric_col].iloc[0])
-                                if val < 100:
-                                    hourly_water_list.append({
-                                        "Година": hour_val,
-                                        "Витрачена вода": val
-                                    })
-                        
-                        hourly_water = pd.DataFrame(hourly_water_list)
+# ----------------------------------------------------
+# 4. СТОВПЧАТИЙ ГРАФІК: ВИКОРИСТАНА ВОДА ЗА ГОДИНУ
+# ----------------------------------------------------
+st.subheader("📊 Використана вода за кожну годину (м³) — Перераховано на 60 хв")
 
-                        if not hourly_water.empty:
-                            water_bar_chart = (
-                            alt.Chart(hourly_water)
-                            .mark_bar(color="#54a0ff", size=60)
-                            .encode(
-                                # Виводимо тільки години під кожним стовпцем
-                                x=alt.X(
-                                    "Година:T", 
-                                    title="Година (дата вказана в підказці)", 
-                                    axis=alt.Axis(format="%H:%M", labelAngle=0)
-                                ),
-                                y=alt.Y("Витрачена вода:Q", title="м³ (на 1 год)"),
-                                tooltip=[
-                                    alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
-                                    alt.Tooltip("Витрачена вода:Q", title="Прогноз на повну год, м³", format=".2f")
-                                ]
-                            )
-                            .properties(height=350)
-                        )
-                            st.altair_chart(water_bar_chart, use_container_width=True)
-                    except Exception as err:
-                        st.info(f"Не вдалося побудувати погодинний графік води: {err}")
-                else:
-                    st.info("Недостатньо даних для побудови погодинного графіка води.")
+water_metric_col = next(
+    (
+        c for c in df_filtered.columns
+        if "показники" in str(c).lower()
+        and "лічильника" in str(c).lower()
+        and ("м³" in str(c).lower() or "куб" in str(c).lower() or "м." in str(c).lower())
+    ),
+    None,
+)
+
+if water_metric_col and "Дата та час" in df_filtered.columns:
+    wat_df = df_filtered[["Дата та час", water_metric_col]].copy()
+    wat_df[water_metric_col] = wat_df[water_metric_col].apply(convert_to_number)
+    wat_df = wat_df.dropna(subset=["Дата та час", water_metric_col])
+
+    if not wat_df.empty:
+        try:
+            wat_df["Година"] = wat_df["Дата та час"].dt.floor("h")
+            hourly_water_list = []
+
+            for hour_val, group in wat_df.groupby("Година"):
+                group = group.sort_values(by="Дата та час")
+                if len(group) >= 2:
+                    total_delta_water = 0.0
+                    total_duration_mins = 0.0
+                    vals = group[water_metric_col].values
+                    times = group["Дата та час"].values
+
+                    for i in range(1, len(vals)):
+                        d_wat = vals[i] - vals[i - 1]
+                        d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i - 1])
+                        d_mins = d_time.total_seconds() / 60.0
+
+                        if 0 <= d_wat < 50 and 0 < d_mins < 60:
+                            total_delta_water += d_wat
+                            total_duration_mins += d_mins
+
+                    if total_duration_mins > 0:
+                        adjusted_water = total_delta_water * (60.0 / total_duration_mins)
+                        if adjusted_water < 200:
+                            hourly_water_list.append({
+                                "Година": hour_val,
+                                "Витрачена вода": adjusted_water,
+                            })
+                elif len(group) == 1:
+                    val = float(group[water_metric_col].iloc[0])
+                    if val < 100:
+                        hourly_water_list.append({
+                            "Година": hour_val,
+                            "Витрачена вода": val,
+                        })
+
+            hourly_water = pd.DataFrame(hourly_water_list)
+
+            if not hourly_water.empty:
+                water_bar_chart = (
+                    alt.Chart(hourly_water)
+                    .mark_bar(color="#54a0ff", size=60)
+                    .encode(
+                        x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%H:%M", labelAngle=0)),
+                        y=alt.Y("Витрачена вода:Q", title="м³ (на 1 год)"),
+                        tooltip=[
+                            alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
+                            alt.Tooltip("Витрачена вода:Q", title="Прогноз на повну год, м³", format=".2f"),
+                        ],
+                    )
+                    .properties(height=350)
+                )
+                st.altair_chart(water_bar_chart, use_container_width=True)
             else:
-                st.info("Стовпець показників лічильника води не знайдено.")
+                st.info("Недостатньо даних для побудови погодинного графіка води.")
+        except Exception as err:
+            st.info(f"Не вдалося побудувати погодинний графік води: {err}")
+    else:
+        st.info("Недостатньо даних для побудови погодинного графіка води.")
+else:
+    st.info("Стовпець показників лічильника води не знайдено.")
+
 # ============================================================
 # ПОЛИВ КОЖНОЇ РОСЛИНИ
 # ============================================================
-
 elif menu_option == "Полив кожної рослини":
-
     st.sidebar.markdown("---")
+    st.sidebar.subheader("Вибір модуля")
 
-    st.sidebar.subheader(
-        "Вибір модуля"
-    )
-
-    if (
-        len(modules_list) > 0
-        and module_col
-    ):
-
+    if len(modules_list) > 0 and module_col:
         selected_module = st.sidebar.selectbox(
             "Оберіть зрошувальний модуль для аналізу дерева:",
             modules_list,
-            key="plant_module_select"
+            key="plant_module_select",
         )
 
-        st.title(
-            f"🌳 Аналітика поливу однієї рослини: {selected_module}"
-        )
+        st.title(f"🌳 Аналітика поливу однієї рослини: {selected_module}")
 
         trees_count = TREES_COUNT_MAP.get(selected_module, 1000)
 
-        df_filtered = df[
-            df[module_col]
-            .astype(str)
-            .str.strip()
-            == selected_module
-        ].copy()
+        df_filtered = df[df[module_col].astype(str).str.strip() == selected_module].copy()
 
         if "Дата та час" in df_filtered.columns and not df_filtered.empty:
             df_filtered = df_filtered.sort_values(by="Дата та час")
@@ -940,13 +770,9 @@ elif menu_option == "Полив кожної рослини":
                 c for c in df.columns
                 if "показники" in str(c).lower()
                 and "лічильника" in str(c).lower()
-                and (
-                    "м³" in str(c).lower()
-                    or "куб" in str(c).lower()
-                    or "м." in str(c).lower()
-                )
+                and ("м³" in str(c).lower() or "куб" in str(c).lower() or "м." in str(c).lower())
             ),
-            None
+            None,
         )
 
         def get_water_per_tree_for_year_dates(target_year, start_dt, end_dt):
@@ -980,9 +806,7 @@ elif menu_option == "Полив кожної рослини":
             if total_m3 <= 0:
                 return None
 
-            liters_total = total_m3 * 1000
-            per_tree = liters_total / trees_count
-            return per_tree
+            return (total_m3 * 1000) / trees_count
 
         def get_water_per_tree_for_period(days_start, days_end):
             start_t = max_date - pd.Timedelta(days=days_end)
@@ -1025,7 +849,6 @@ elif menu_option == "Полив кожної рослини":
 
         with col_metrics:
             st.markdown("### 📊 Отримано води однією рослиною")
-            
             st.info(f"💧 **За добу (24 години):** {water_24h:.1f} л")
 
             st.markdown("#### 📅 Розподіл по тижнях року (поточний та 2 попередні роки)")
@@ -1042,7 +865,6 @@ elif menu_option == "Полив кожної рослини":
             y_prev2 = current_year - 2
 
             year_start = pd.Timestamp(y_curr, 1, 1)
-
             w1_start = year_start
             w1_end = pd.Timestamp(y_curr, 1, 4)
 
@@ -1062,7 +884,7 @@ elif menu_option == "Полив кожної рослини":
 
             for w in range(2, 53):
                 current_sunday = current_monday + pd.Timedelta(days=6)
-                
+
                 if current_monday > pd.Timestamp(y_curr, 12, 31):
                     break
 
@@ -1077,7 +899,7 @@ elif menu_option == "Полив кожної рослини":
                 val_curr = get_water_per_tree_for_year_dates(y_curr, current_monday, current_sunday)
                 val_p1 = get_water_per_tree_for_year_dates(y_prev1, current_monday, current_sunday)
                 val_p2 = get_water_per_tree_for_year_dates(y_prev2, current_monday, current_sunday)
-                
+
                 table_data.append({
                     "Тиждень": f"{w} тиждень року",
                     "Дати тижня": date_str,
@@ -1094,11 +916,7 @@ elif menu_option == "Полив кожної рослини":
                 df_table,
                 use_container_width=True,
                 hide_index=True,
-                height=400
+                height=400,
             )
-
     else:
-
-        st.warning(
-            "Наразі не виявлено активних модулів у базі даних."
-        )
+        st.warning("Наразі не виявлено активних модулів у базі даних.")
