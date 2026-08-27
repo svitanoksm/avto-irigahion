@@ -687,7 +687,7 @@ elif menu_option == "Поливні модулі":
                                 
                                 vals = group[energy_col_name].values
                                 times = group["Дата та час"].values
-                                 ж
+                                 
                                 for i in range(1, len(vals)):
                                     d_en = vals[i] - vals[i-1]
                                     d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i-1])
