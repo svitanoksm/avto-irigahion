@@ -542,6 +542,9 @@ elif menu_option == "Поливні модулі":
 
         else:
 
+            # ----------------------------------------------------
+            # 1. ТРЕНД ПОТУЖНОСТІ
+            # ----------------------------------------------------
             st.subheader(
                 "⚡ Потужність за період (кВт/год) — Тренд"
             )
@@ -649,6 +652,56 @@ elif menu_option == "Поливні модулі":
                         use_container_width=True
                     )
 
+            # ----------------------------------------------------
+            # 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ
+            # ----------------------------------------------------
+            st.subheader(
+                "📊 Використана електроенергія за кожну годину (кВт·год)"
+            )
+
+            energy_col_name = next(
+                (
+                    c for c in df_filtered.columns
+                    if "показники" in str(c).lower()
+                    and "лічильника" in str(c).lower()
+                    and "квт" in str(c).lower()
+                ),
+                None
+            )
+
+            if energy_col_name and "Дата та час" in df_filtered.columns:
+                en_df = df_filtered[["Дата та час", energy_col_name]].copy()
+                en_df[energy_col_name] = en_df[energy_col_name].apply(convert_to_number)
+                en_df = en_df.dropna(subset=["Дата та час", energy_col_name])
+
+                if not en_df.empty:
+                    en_df["Година"] = en_df["Дата та час"].dt.floor("H")
+                    # Рахуємо споживання за годину як різницю макс та мін або суму приростів
+                    hourly_energy = en_df.groupby("Година")[energy_col_name].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
+                    hourly_energy.columns = ["Година", "Витрачена електроенергія"]
+
+                    energy_bar_chart = (
+                        alt.Chart(hourly_energy)
+                        .mark_bar(color="#ff9999")
+                        .encode(
+                            x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
+                            y=alt.Y("Витрачена електроенергія:Q", title="кВт·год"),
+                            tooltip=[
+                                alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
+                                alt.Tooltip("Витрачена електроенергія:Q", title="Спожито кВт·год", format=".2f")
+                            ]
+                        )
+                        .properties(height=350)
+                    )
+                    st.altair_chart(energy_bar_chart, use_container_width=True)
+                else:
+                    st.info("Недостатньо даних для побудови погодинного графіка електроенергії.")
+            else:
+                st.info("Стовпець показників лічильника електроенергії не знайдено.")
+
+            # ----------------------------------------------------
+            # 3. ТРЕНД ПРОДУКТИВНОСТІ
+            # ----------------------------------------------------
             st.subheader(
                 "🌊 Продуктивність (куб. м./год) — Тренд"
             )
@@ -763,6 +816,56 @@ elif menu_option == "Поливні модулі":
                             use_container_width=True
                         )
 
+            # ----------------------------------------------------
+            # 4. СТОВПЧАТИЙ ГРАФІК: ВИКОРИСТАНА ВОДА ЗА ГОДИНУ
+            # ----------------------------------------------------
+            st.subheader(
+                "📊 Використана вода за кожну годину (м³)"
+            )
+
+            water_metric_col = next(
+                (
+                    c for c in df_filtered.columns
+                    if "показники" in str(c).lower()
+                    and "лічильника" in str(c).lower()
+                    and (
+                        "м³" in str(c).lower()
+                        or "куб" in str(c).lower()
+                        or "м." in str(c).lower()
+                    )
+                ),
+                None
+            )
+
+            if water_metric_col and "Дата та час" in df_filtered.columns:
+                wat_df = df_filtered[["Дата та час", water_metric_col]].copy()
+                wat_df[water_metric_col] = wat_df[water_metric_col].apply(convert_to_number)
+                wat_df = wat_df.dropna(subset=["Дата та час", water_metric_col])
+
+                if not wat_df.empty:
+                    wat_df["Година"] = wat_df["Дата та час"].dt.floor("H")
+                    hourly_water = wat_df.groupby("Година")[water_metric_col].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
+                    hourly_water.columns = ["Година", "Витрачена вода"]
+
+                    water_bar_chart = (
+                        alt.Chart(hourly_water)
+                        .mark_bar(color="#54a0ff")
+                        .encode(
+                            x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
+                            y=alt.Y("Витрачена вода:Q", title="м³"),
+                            tooltip=[
+                                alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
+                                alt.Tooltip("Витрачена вода:Q", title="Витрачено м³", format=".2f")
+                            ]
+                        )
+                        .properties(height=350)
+                    )
+                    st.altair_chart(water_bar_chart, use_container_width=True)
+                else:
+                    st.info("Недостатньо даних для побудови погодинного графіка води.")
+            else:
+                st.info("Стовпець показників лічильника води не знайдено.")
+
     else:
 
         st.warning(
@@ -830,7 +933,6 @@ elif menu_option == "Полив кожної рослини":
 
         # Універсальна функція розрахунку для конкретного року та діапазону дат
         def get_water_per_tree_for_year_dates(target_year, start_dt, end_dt):
-            # Коригуємо дати під цільовий рік
             s_dt = start_dt.replace(year=target_year)
             e_dt = end_dt.replace(year=target_year)
 
@@ -865,7 +967,6 @@ elif menu_option == "Полив кожної рослини":
             per_tree = liters_total / trees_count
             return per_tree
 
-        # Зберігаємо розрахунок за добу (останні 24 години)
         def get_water_per_tree_for_period(days_start, days_end):
             start_t = max_date - pd.Timedelta(days=days_end)
             end_t = max_date - pd.Timedelta(days=days_start)
@@ -895,7 +996,6 @@ elif menu_option == "Полив кожної рослини":
 
         water_24h = get_water_per_tree_for_period(0, 1)
 
-        # Розміщуємо макет: зліва — зображення дерева, справа — показники/таблиця
         col_img, col_metrics = st.columns([1, 2], gap="large")
 
         with col_img:
@@ -926,7 +1026,6 @@ elif menu_option == "Полив кожної рослини":
 
             year_start = pd.Timestamp(y_curr, 1, 1)
 
-            # 1-й тиждень
             w1_start = year_start
             w1_end = pd.Timestamp(y_curr, 1, 4)
 
@@ -942,7 +1041,6 @@ elif menu_option == "Полив кожної рослини":
                 f"{y_curr} (поточний)": f"{val_w1_curr:.1f} л" if val_w1_curr is not None else "-"
             })
 
-            # Решта тижнів
             current_monday = pd.Timestamp(y_curr, 1, 5)
 
             for w in range(2, 53):
