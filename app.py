@@ -653,10 +653,10 @@ elif menu_option == "Поливні модулі":
                     )
 
             # ----------------------------------------------------
-            # 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ
+            # 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ (ПЕРЕРАХУНОК НА ПОВНУ ГОДИНУ)
             # ----------------------------------------------------
             st.subheader(
-                "📊 Використана електроенергія за кожну годину (кВт·год)"
+                "📊 Використана електроенергія за кожну годину (кВт·год) — Перераховано на 60 хв"
             )
 
             energy_col_name = next(
@@ -676,26 +676,55 @@ elif menu_option == "Поливні модулі":
 
                 if not en_df.empty:
                     try:
-                        en_df["Година"] = en_df["Дата та час"].dt.round("1h")
-                        hourly_energy = en_df.groupby("Година")[energy_col_name].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
-                        hourly_energy.columns = ["Година", "Витрачена електроенергія"]
+                        # Групуємо за календарною годиною (початок години)
+                        en_df["Година"] = en_df["Дата та час"].dt.floor("h")
+                        
+                        hourly_energy_list = []
+                        for hour_val, group in en_df.groupby("Година"):
+                            if len(group) >= 1:
+                                min_time = group["Дата та час"].min()
+                                max_time = group["Дата та час"].max()
+                                
+                                # Різниця лічильників за наявні записи в межах години
+                                if len(group) > 1:
+                                    delta_energy = float(group[energy_col_name].iloc[-1]) - float(group[energy_col_name].iloc[0])
+                                else:
+                                    delta_energy = float(group[energy_col_name].iloc[0])
+                                
+                                # Тривалість у хвилинах між першим та останнім зафіксованим виміром
+                                duration_mins = (max_time - min_time).total_seconds() / 60.0
+                                
+                                # Якщо інтервал дуже малий або нульовий, беремо 1 хвилину, щоб уникнути ділення на нуль
+                                if duration_mins < 1:
+                                    duration_mins = 1.0
+                                    
+                                # Перерахунок на повну годину (60 хвилин)
+                                adjusted_energy = delta_energy * (60.0 / duration_mins)
+                                
+                                hourly_energy_list.append({
+                                    "Година": hour_val,
+                                    "Витрачена електроенергія": adjusted_energy
+                                })
+                        
+                        hourly_energy = pd.DataFrame(hourly_energy_list)
 
-                        energy_bar_chart = (
-                            alt.Chart(hourly_energy)
-                            .mark_bar(color="#ff9999", size=20)
-                            .encode(
-                                x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
-                                y=alt.Y("Витрачена електроенергія:Q", title="кВт·год"),
-                                tooltip=[
-                                    alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
-                                    alt.Tooltip("Витрачена електроенергія:Q", title="Спожито кВт·год", format=".2f")
-                                ]
+                        if not hourly_energy.empty:
+                            energy_bar_chart = (
+                                alt.Chart(hourly_energy)
+                                .mark_bar(color="#ff9999", size=20)
+                                .encode(
+                                    x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
+                                    y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
+                                    tooltip=[
+                                        alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
+                                        alt.Tooltip("Витрачена електроенергія:Q", title="Прогноз на повну год, кВт·год", format=".2f")
+                                    ]
+                                )
+                                .properties(height=350)
                             )
-                            .properties(height=350)
-                        )
-                        st.altair_chart(energy_bar_chart, use_container_width=True)
+                            st.altair_chart(energy_bar_chart, use_container_width=True)
                     except Exception as err:
-                        st.info(f"Не вдалося побудувати погодинний графік електроенергії через формат дати: {err}")
+                        st.info(f"Не вдалося побудувати погодинний графік електроенергії: {err}")
                 else:
                     st.info("Недостатньо даних для побудови погодинного графіка електроенергії.")
             else:
@@ -818,11 +847,11 @@ elif menu_option == "Поливні модулі":
                             use_container_width=True
                         )
 
-            # ----------------------------------------------------
-            # 4. СТОВПЧАТИЙ ГРАФІК: ВИКОРИСТАНА ВОДА ЗА ГОДИНУ
+           # ----------------------------------------------------
+            # 4. СТОВПЧАТИЙ ГРАФІК: ВИКОРИСТАНА ВОДА ЗА ГОДИНУ (ПЕРЕРАХУНОК НА ПОВНУ ГОДИНУ)
             # ----------------------------------------------------
             st.subheader(
-                "📊 Використана вода за кожну годину (м³)"
+                "📊 Використана вода за кожну годину (м³) — Перераховано на 60 хв"
             )
 
             water_metric_col = next(
@@ -846,38 +875,53 @@ elif menu_option == "Поливні модулі":
 
                 if not wat_df.empty:
                     try:
-                        wat_df["Година"] = wat_df["Дата та час"].dt.round("1h")
-                        hourly_water = wat_df.groupby("Година")[water_metric_col].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
-                        hourly_water.columns = ["Година", "Витрачена вода"]
+                        wat_df["Година"] = wat_df["Дата та час"].dt.floor("h")
+                        
+                        hourly_water_list = []
+                        for hour_val, group in wat_df.groupby("Година"):
+                            if len(group) >= 1:
+                                min_time = group["Дата та час"].min()
+                                max_time = group["Дата та час"].max()
+                                
+                                if len(group) > 1:
+                                    delta_water = float(group[water_metric_col].iloc[-1]) - float(group[water_metric_col].iloc[0])
+                                else:
+                                    delta_water = float(group[water_metric_col].iloc[0])
+                                
+                                duration_mins = (max_time - min_time).total_seconds() / 60.0
+                                if duration_mins < 1:
+                                    duration_mins = 1.0
+                                    
+                                adjusted_water = delta_water * (60.0 / duration_mins)
+                                
+                                hourly_water_list.append({
+                                    "Година": hour_val,
+                                    "Витрачена вода": adjusted_water
+                                })
+                        
+                        hourly_water = pd.DataFrame(hourly_water_list)
 
-                        water_bar_chart = (
-                            alt.Chart(hourly_water)
-                            .mark_bar(color="#54a0ff", size=20)
-                            .encode(
-                                x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
-                                y=alt.Y("Витрачена вода:Q", title="м³"),
-                                tooltip=[
-                                    alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
-                                    alt.Tooltip("Витрачена вода:Q", title="Витрачено м³", format=".2f")
-                                ]
+                        if not hourly_water.empty:
+                            water_bar_chart = (
+                                alt.Chart(hourly_water)
+                                .mark_bar(color="#54a0ff", size=20)
+                                .encode(
+                                    x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
+                                    y=alt.Y("Витрачена вода:Q", title="м³ (на 1 год)"),
+                                    tooltip=[
+                                        alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
+                                        alt.Tooltip("Витрачена вода:Q", title="Прогноз на повну год, м³", format=".2f")
+                                    ]
+                                )
+                                .properties(height=350)
                             )
-                            .properties(height=350)
-                        )
-                        st.altair_chart(water_bar_chart, use_container_width=True)
+                            st.altair_chart(water_bar_chart, use_container_width=True)
                     except Exception as err:
-                        st.info(f"Не вдалося побудувати погодинний графік води через формат дати: {err}")
+                        st.info(f"Не вдалося побудувати погодинний графік води: {err}")
                 else:
                     st.info("Недостатньо даних для побудови погодинного графіка води.")
             else:
                 st.info("Стовпець показників лічильника води не знайдено.")
-
-    else:
-
-        st.warning(
-            "Наразі не виявлено активних модулів у базі даних."
-        )
-
-
 # ============================================================
 # ПОЛИВ КОЖНОЇ РОСЛИНИ
 # ============================================================
