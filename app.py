@@ -719,18 +719,23 @@ elif menu_option == "Поливні модулі":
 
                         if not hourly_energy.empty:
                             energy_bar_chart = (
-                                alt.Chart(hourly_energy)
-                                .mark_bar(color="#ff9999", size=60)
-                                .encode(
-                                    x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
-                                    y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
-                                    tooltip=[
-                                        alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
-                                        alt.Tooltip("Витрачена електроенергія:Q", title="Прогноз на повну год, кВт·год", format=".2f")
-                                    ]
-                                )
-                                .properties(height=350)
+                            alt.Chart(hourly_energy)
+                            .mark_bar(color="#ff9999", size=60)
+                            .encode(
+                                # Виводимо тільки години під кожним стовпцем
+                                x=alt.X(
+                                    "Година:T", 
+                                    title="Година (дата вказана в підказці)", 
+                                    axis=alt.Axis(format="%H:%M", labelAngle=0)
+                                ),
+                                y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
+                                tooltip=[
+                                    alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
+                                    alt.Tooltip("Витрачена електроенергія:Q", title="Прогноз на повну год, кВт·год", format=".2f")
+                                ]
                             )
+                            .properties(height=350)
+                        )
                             st.altair_chart(energy_bar_chart, use_container_width=True)
                     except Exception as err:
                         st.info(f"Не вдалося побудувати погодинний графік електроенергії: {err}")
@@ -924,18 +929,23 @@ elif menu_option == "Поливні модулі":
 
                         if not hourly_water.empty:
                             water_bar_chart = (
-                                alt.Chart(hourly_water)
-                                .mark_bar(color="#54a0ff", size=60)
-                                .encode(
-                                    x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
-                                    y=alt.Y("Витрачена вода:Q", title="м³ (на 1 год)"),
-                                    tooltip=[
-                                        alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
-                                        alt.Tooltip("Витрачена вода:Q", title="Прогноз на повну год, м³", format=".2f")
-                                    ]
-                                )
-                                .properties(height=350)
+                            alt.Chart(hourly_water)
+                            .mark_bar(color="#54a0ff", size=60)
+                            .encode(
+                                # Виводимо тільки години під кожним стовпцем
+                                x=alt.X(
+                                    "Година:T", 
+                                    title="Година (дата вказана в підказці)", 
+                                    axis=alt.Axis(format="%H:%M", labelAngle=0)
+                                ),
+                                y=alt.Y("Витрачена вода:Q", title="м³ (на 1 год)"),
+                                tooltip=[
+                                    alt.Tooltip("Година:T", title="Дата та година", format="%d.%m.%Y %H:00"),
+                                    alt.Tooltip("Витрачена вода:Q", title="Прогноз на повну год, м³", format=".2f")
+                                ]
                             )
+                            .properties(height=350)
+                        )
                             st.altair_chart(water_bar_chart, use_container_width=True)
                     except Exception as err:
                         st.info(f"Не вдалося побудувати погодинний графік води: {err}")
