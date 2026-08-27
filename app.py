@@ -720,7 +720,7 @@ elif menu_option == "Поливні модулі":
                         if not hourly_energy.empty:
                             energy_bar_chart = (
                                 alt.Chart(hourly_energy)
-                                .mark_bar(color="#ff9999", size=20)
+                                .mark_bar(color="#ff9999", size=60)
                                 .encode(
                                     x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
                                     y=alt.Y("Витрачена електроенергія:Q", title="кВт·год (на 1 год)"),
@@ -925,7 +925,7 @@ elif menu_option == "Поливні модулі":
                         if not hourly_water.empty:
                             water_bar_chart = (
                                 alt.Chart(hourly_water)
-                                .mark_bar(color="#54a0ff", size=20)
+                                .mark_bar(color="#54a0ff", size=60)
                                 .encode(
                                     x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
                                     y=alt.Y("Витрачена вода:Q", title="м³ (на 1 год)"),
