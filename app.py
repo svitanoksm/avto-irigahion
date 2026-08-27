@@ -310,21 +310,18 @@ if df.empty:
 # БОКОВЕ МЕНЮ
 # ============================================================
 
-st.sidebar.title(
-    "💧 FMS AgronomOk"
-)
+st.sidebar.title("💧 FMS AgronomOk")
 
-st.sidebar.subheader(
-    "Панель управління"
-)
+st.sidebar.subheader("Панель управління")
 
 menu_option = st.sidebar.radio(
     "Перейти до:",
     [
         "Головна панель",
         "Поливні модулі",
-        "Полив кожної рослини"
-    ]
+        "Полив кожної рослини",
+        "Параметри полів та систем",  # <-- Додано новий пункт меню
+    ],
 )
 
 
@@ -335,37 +332,21 @@ menu_option = st.sidebar.radio(
 module_col = None
 
 for col in df.columns:
-
     col_lower = str(col).lower()
 
-    if (
-        "модуль" in col_lower
-        and "зрош" in col_lower
-    ):
-
+    if "модуль" in col_lower and "зрош" in col_lower:
         module_col = col
         break
 
 
 if module_col:
-
     modules_list = (
-        df[module_col]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .unique()
-        .tolist()
+        df[module_col].dropna().astype(str).str.strip().unique().tolist()
     )
 
-    modules_list = [
-        m
-        for m in modules_list
-        if m != "Вимкнено"
-    ]
+    modules_list = [m for m in modules_list if m != "Вимкнено"]
 
 else:
-
     modules_list = []
 
 
@@ -375,124 +356,73 @@ else:
 
 if menu_option == "Головна панель":
 
-    st.title(
-        "📊 Загальний моніторинг свердловини"
-    )
+    st.title("📊 Загальний моніторинг свердловини")
 
     latest = df.iloc[-1]
 
     col1, col2, col3, col4 = st.columns(4)
 
     state_col = next(
-        (
-            c
-            for c in df.columns
-            if "стан" in str(c).lower()
-        ),
-        None
+        (c for c in df.columns if "стан" in str(c).lower()), None
     )
 
     col1.metric(
         "Стан вимикача",
-        latest.get(
-            state_col,
-            "Н/Д"
-        )
-        if state_col
-        else "Н/Д"
+        latest.get(state_col, "Н/Д") if state_col else "Н/Д",
     )
 
     water_col = next(
         (
             c
             for c in df.columns
-            if (
-                "показники" in str(c).lower()
-                and "лічильника" in str(c).lower()
-                and (
-                    "м³" in str(c).lower()
-                    or "куб" in str(c).lower()
-                    or "м." in str(c).lower()
-                )
+            if "показники" in str(c).lower()
+            and "лічильника" in str(c).lower()
+            and (
+                "м³" in str(c).lower()
+                or "куб" in str(c).lower()
+                or "м." in str(c).lower()
             )
         ),
-        None
+        None,
     )
 
-    water = (
-        latest.get(
-            water_col,
-            0
-        )
-        if water_col
-        else 0
-    )
+    water = latest.get(water_col, 0) if water_col else 0
 
-    water = convert_to_number(
-        water
-    )
+    water = convert_to_number(water)
 
     if water is None:
         water = 0
 
-    col2.metric(
-        "Загальні витрати води",
-        f"{water:.2f} м³"
-    )
+    col2.metric("Загальні витрати води", f"{water:.2f} м³")
 
     energy_col = next(
         (
             c
             for c in df.columns
-            if (
-                "показники" in str(c).lower()
-                and "лічильника" in str(c).lower()
-                and "квт" in str(c).lower()
-            )
+            if "показники" in str(c).lower()
+            and "лічильника" in str(c).lower()
+            and "квт" in str(c).lower()
         ),
-        None
+        None,
     )
 
-    energy = (
-        latest.get(
-            energy_col,
-            0
-        )
-        if energy_col
-        else 0
-    )
+    energy = latest.get(energy_col, 0) if energy_col else 0
 
-    energy = convert_to_number(
-        energy
-    )
+    energy = convert_to_number(energy)
 
     if energy is None:
         energy = 0
 
-    col3.metric(
-        "Загальна енергія",
-        f"{energy:.2f} кВт"
-    )
+    col3.metric("Загальна енергія", f"{energy:.2f} кВт")
 
     col4.metric(
         "Поточний модуль",
-        latest.get(
-            module_col,
-            "Н/Д"
-        )
-        if module_col
-        else "Н/Д"
+        latest.get(module_col, "Н/Д") if module_col else "Н/Д",
     )
 
-    st.subheader(
-        "Останні записи з таблиці"
-    )
+    st.subheader("Останні записи з таблиці")
 
-    st.dataframe(
-        df.tail(10),
-        use_container_width=True,
-        hide_index=True
-    )
+    st.dataframe(df.tail(10), use_container_width=True, hide_index=True)
 
 
 # ============================================================
@@ -503,44 +433,55 @@ elif menu_option == "Поливні модулі":
 
     st.sidebar.markdown("---")
 
-    st.sidebar.subheader(
-        "Вибір модуля"
-    )
+    st.sidebar.subheader("Вибір модуля")
 
-    if (
-        len(modules_list) > 0
-        and module_col
-    ):
+    if len(modules_list) > 0 and module_col:
 
         selected_module = st.sidebar.selectbox(
-            "Оберіть зрошувальний модуль:",
-            modules_list
+            "Оберіть зрошувальний модуль:", modules_list
         )
 
-        st.title(
-            f"⚙️ Моніторинг модуля: {selected_module}"
-        )
+        st.title(f"⚙️ Моніторинг модуля: {selected_module}")
 
-        df_filtered = df[
-            df[module_col]
-            .astype(str)
-            .str.strip()
-            == selected_module
-        ].copy()
+        df_filtered = (
+            df[df[module_col].astype(str).str.strip() == selected_module].copy()
+        )
 
         if "Дата та час" in df_filtered.columns:
-
-            df_filtered = df_filtered.sort_values(
-                by="Дата та час"
-            )
+            df_filtered = df_filtered.sort_values(by="Дата та час")
 
         if df_filtered.empty:
-
-            st.warning(
-                "Немає даних для обраного модуля."
-            )
+            st.warning("Немає даних для обраного модуля.")
 
         else:
+            # Тут далі йде ваша логіка побудови графіків та таблиць для обраного модуля
+
+
+# ============================================================
+# ПОЛИВ КОЖНОЇ РОСЛИНИ
+# ============================================================
+
+elif menu_option == "Полив кожної рослини":
+    st.title("🌱 Полив кожної рослини")
+    st.info("Розділ знаходиться в стадії налаштування.")
+
+
+# ============================================================
+# ПАРАМЕТРИ ПОЛІВ ТА СИСТЕМ
+# ============================================================
+
+elif menu_option == "Параметри полів та систем":
+    st.title("⚙️ Параметри полів та систем")
+    st.write(
+        "Ви можете перейти до окремої сторінки налаштувань, створеної у папці pages:"
+    )
+
+    # Автоматичний перехід на окремий файл сторінки у Streamlit
+    st.page_link(
+        "pages/01_Параметри_полів.py",
+        label="Відкрити сторінку параметрів",
+        icon="📁",
+    )
 
             # ----------------------------------------------------
             # 1. ТРЕНД ПОТУЖНОСТІ
