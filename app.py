@@ -653,7 +653,7 @@ elif menu_option == "Поливні модулі":
                     )
 
            # ----------------------------------------------------
-            # 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ (ТОЧНИЙ ПЕРЕРАХУНОК)
+            # 2. СТОВПЧАТИЙ ГРАФІК: СПОЖИТА ЕЛЕКТРОЕНЕРГІЯ ЗА ГОДИНУ (БЕЗ ВИКИДІВ)
             # ----------------------------------------------------
             st.subheader(
                 "📊 Використана електроенергія за кожну годину (кВт·год) — Перераховано на 60 хв"
@@ -682,36 +682,38 @@ elif menu_option == "Поливні модулі":
                         for hour_val, group in en_df.groupby("Година"):
                             group = group.sort_values(by="Дата та час")
                             if len(group) >= 2:
-                                # Рахуємо суму дельт між сусідніми вимірами та їхній час
                                 total_delta_energy = 0.0
                                 total_duration_mins = 0.0
                                 
                                 vals = group[energy_col_name].values
                                 times = group["Дата та час"].values
-                                
+                                 ж
                                 for i in range(1, len(vals)):
                                     d_en = vals[i] - vals[i-1]
                                     d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i-1])
                                     d_mins = d_time.total_seconds() / 60.0
                                     
-                                    # Відсікаємо аномальні розриви (наприклад, якщо між записами пройшло більше 30 хв)
-                                    if 0 <= d_en < 100 and 0 < d_mins < 30:
+                                    # Жорсткий фільтр: дельта не може бути від'ємною або перевищувати 30 кВт за короткий проміжок
+                                    if 0 <= d_en < 30 and 0 < d_mins < 60:
                                         total_delta_energy += d_en
                                         total_duration_mins += d_mins
                                         
                                 if total_duration_mins > 0:
-                                    # Перерахунок пропорційно на 60 хвилин
                                     adjusted_energy = total_delta_energy * (60.0 / total_duration_mins)
+                                    # Додатковий запобіжник на випадок аномального перерахунку повної години (> 100 кВт/год на годину)
+                                    if adjusted_energy < 150:
+                                        hourly_energy_list.append({
+                                            "Година": hour_val,
+                                            "Витрачена електроенергія": adjusted_energy
+                                        })
+                            elif len(group) == 1:
+                                val = float(group[energy_col_name].iloc[0])
+                                # Якщо це не абсолютне значення лічильника (яке > 150), а вже дельта
+                                if val < 50:
                                     hourly_energy_list.append({
                                         "Година": hour_val,
-                                        "Витрачена електроенергія": adjusted_energy
+                                        "Витрачена електроенергія": val
                                     })
-                            elif len(group) == 1:
-                                # Якщо за годину лише один запис, беремо його як є
-                                hourly_energy_list.append({
-                                    "Година": hour_val,
-                                    "Витрачена електроенергія": float(group[energy_col_name].iloc[0])
-                                })
                         
                         hourly_energy = pd.DataFrame(hourly_energy_list)
 
@@ -854,7 +856,7 @@ elif menu_option == "Поливні модулі":
                         )
 
            # ----------------------------------------------------
-            # 4. СТОВПЧАТИЙ ГРАФІК: ВИКОРИСТАНА ВОДА ЗА ГОДИНУ (ТОЧНИЙ ПЕРЕРАХУНОК)
+            # 4. СТОВПЧАТИЙ ГРАФІК: ВИКОРИСТАНА ВОДА ЗА ГОДИНУ (БЕЗ ВИКИДІВ)
             # ----------------------------------------------------
             st.subheader(
                 "📊 Використана вода за кожну годину (м³) — Перераховано на 60 хв"
@@ -898,21 +900,25 @@ elif menu_option == "Поливні модулі":
                                     d_time = pd.Timestamp(times[i]) - pd.Timestamp(times[i-1])
                                     d_mins = d_time.total_seconds() / 60.0
                                     
-                                    if 0 <= d_wat < 500 and 0 < d_mins < 30:
+                                    # Захисний фільтр для води (дельта за короткий проміжок)
+                                    if 0 <= d_wat < 50 and 0 < d_mins < 60:
                                         total_delta_water += d_wat
                                         total_duration_mins += d_mins
                                         
                                 if total_duration_mins > 0:
                                     adjusted_water = total_delta_water * (60.0 / total_duration_mins)
+                                    if adjusted_water < 200:
+                                        hourly_water_list.append({
+                                            "Година": hour_val,
+                                            "Витрачена вода": adjusted_water
+                                        })
+                            elif len(group) == 1:
+                                val = float(group[water_metric_col].iloc[0])
+                                if val < 100:
                                     hourly_water_list.append({
                                         "Година": hour_val,
-                                        "Витрачена вода": adjusted_water
+                                        "Витрачена вода": val
                                     })
-                            elif len(group) == 1:
-                                hourly_water_list.append({
-                                    "Година": hour_val,
-                                    "Витрачена вода": float(group[water_metric_col].iloc[0])
-                                })
                         
                         hourly_water = pd.DataFrame(hourly_water_list)
 
