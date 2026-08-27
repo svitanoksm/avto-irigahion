@@ -1206,7 +1206,7 @@ elif menu_option == "Параметри полів та систем":
     )
 
     st.page_link(
-        "pages/01_Параметри_полів.py",
-        label="Відкрити сторінку параметрів",
-        icon="📁",
-    )
+    "pages/01_Field_Parameters.py",
+    label="Відкрити сторінку параметрів",
+    icon="📁",
+)
