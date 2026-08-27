@@ -675,25 +675,27 @@ elif menu_option == "Поливні модулі":
                 en_df = en_df.dropna(subset=["Дата та час", energy_col_name])
 
                 if not en_df.empty:
-                    en_df["Година"] = en_df["Дата та час"].dt.floor("H")
-                    # Рахуємо споживання за годину як різницю макс та мін або суму приростів
-                    hourly_energy = en_df.groupby("Година")[energy_col_name].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
-                    hourly_energy.columns = ["Година", "Витрачена електроенергія"]
+                    try:
+                        en_df["Година"] = en_df["Дата та час"].dt.round("1h")
+                        hourly_energy = en_df.groupby("Година")[energy_col_name].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
+                        hourly_energy.columns = ["Година", "Витрачена електроенергія"]
 
-                    energy_bar_chart = (
-                        alt.Chart(hourly_energy)
-                        .mark_bar(color="#ff9999")
-                        .encode(
-                            x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
-                            y=alt.Y("Витрачена електроенергія:Q", title="кВт·год"),
-                            tooltip=[
-                                alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
-                                alt.Tooltip("Витрачена електроенергія:Q", title="Спожито кВт·год", format=".2f")
-                            ]
+                        energy_bar_chart = (
+                            alt.Chart(hourly_energy)
+                            .mark_bar(color="#ff9999")
+                            .encode(
+                                x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
+                                y=alt.Y("Витрачена електроенергія:Q", title="кВт·год"),
+                                tooltip=[
+                                    alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
+                                    alt.Tooltip("Витрачена електроенергія:Q", title="Спожито кВт·год", format=".2f")
+                                ]
+                            )
+                            .properties(height=350)
                         )
-                        .properties(height=350)
-                    )
-                    st.altair_chart(energy_bar_chart, use_container_width=True)
+                        st.altair_chart(energy_bar_chart, use_container_width=True)
+                    except Exception as err:
+                        st.info(f"Не вдалося побудувати погодинний графік електроенергії через формат дати: {err}")
                 else:
                     st.info("Недостатньо даних для побудови погодинного графіка електроенергії.")
             else:
@@ -843,24 +845,27 @@ elif menu_option == "Поливні модулі":
                 wat_df = wat_df.dropna(subset=["Дата та час", water_metric_col])
 
                 if not wat_df.empty:
-                    wat_df["Година"] = wat_df["Дата та час"].dt.floor("H")
-                    hourly_water = wat_df.groupby("Година")[water_metric_col].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
-                    hourly_water.columns = ["Година", "Витрачена вода"]
+                    try:
+                        wat_df["Година"] = wat_df["Дата та час"].dt.round("1h")
+                        hourly_water = wat_df.groupby("Година")[water_metric_col].agg(lambda x: x.max() - x.min() if len(x) > 1 else x.iloc[0]).reset_index()
+                        hourly_water.columns = ["Година", "Витрачена вода"]
 
-                    water_bar_chart = (
-                        alt.Chart(hourly_water)
-                        .mark_bar(color="#54a0ff")
-                        .encode(
-                            x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
-                            y=alt.Y("Витрачена вода:Q", title="м³"),
-                            tooltip=[
-                                alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
-                                alt.Tooltip("Витрачена вода:Q", title="Витрачено м³", format=".2f")
-                            ]
+                        water_bar_chart = (
+                            alt.Chart(hourly_water)
+                            .mark_bar(color="#54a0ff")
+                            .encode(
+                                x=alt.X("Година:T", title="Година", axis=alt.Axis(format="%d.%m %H:%M")),
+                                y=alt.Y("Витрачена вода:Q", title="м³"),
+                                tooltip=[
+                                    alt.Tooltip("Година:T", title="Година", format="%d.%m.%Y %H:00"),
+                                    alt.Tooltip("Витрачена вода:Q", title="Витрачено м³", format=".2f")
+                                ]
+                            )
+                            .properties(height=350)
                         )
-                        .properties(height=350)
-                    )
-                    st.altair_chart(water_bar_chart, use_container_width=True)
+                        st.altair_chart(water_bar_chart, use_container_width=True)
+                    except Exception as err:
+                        st.info(f"Не вдалося побудувати погодинний графік води через формат дати: {err}")
                 else:
                     st.info("Недостатньо даних для побудови погодинного графіка води.")
             else:
@@ -931,7 +936,6 @@ elif menu_option == "Полив кожної рослини":
             None
         )
 
-        # Універсальна функція розрахунку для конкретного року та діапазону дат
         def get_water_per_tree_for_year_dates(target_year, start_dt, end_dt):
             s_dt = start_dt.replace(year=target_year)
             e_dt = end_dt.replace(year=target_year)
