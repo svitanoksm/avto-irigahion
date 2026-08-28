@@ -1400,15 +1400,6 @@ elif menu_option == "Полив кожної рослини":
                 # КІЛЬКІСТЬ ДЕРЕВ
                 # ====================================================
 
-                # Знаходимо три необхідні стовпці:
-                #
-                # Кількість Джифоні, шт
-                # Кількість запилювача Мортарела, шт
-                # Кількість запилювача Романо, шт
-                #
-                # Пошук здійснюється за ключовими словами,
-                # тому він працює навіть якщо назва трохи відрізняється.
-
                 col_jifoni = find_column(
                     df_params,
                     contains=["джифоні"],
@@ -1430,18 +1421,14 @@ elif menu_option == "Полив кожної рослини":
                 # ----------------------------------------------------
 
                 if col_jifoni:
-
-                    val_jifoni = (
-                        convert_to_number(
-                            row_data[col_jifoni]
-                        )
-                    )
-
+                    raw_val = row_data[col_jifoni]
+                    # Якщо раптом це Series, беремо перший елемент
+                    if hasattr(raw_val, "iloc"):
+                        raw_val = raw_val.iloc[0]
+                    val_jifoni = convert_to_number(raw_val)
                     if val_jifoni is None:
                         val_jifoni = 0.0
-
                 else:
-
                     val_jifoni = 0.0
 
 
@@ -1450,18 +1437,13 @@ elif menu_option == "Полив кожної рослини":
                 # ----------------------------------------------------
 
                 if col_mortarela:
-
-                    val_mortarela = (
-                        convert_to_number(
-                            row_data[col_mortarela]
-                        )
-                    )
-
+                    raw_val = row_data[col_mortarela]
+                    if hasattr(raw_val, "iloc"):
+                        raw_val = raw_val.iloc[0]
+                    val_mortarela = convert_to_number(raw_val)
                     if val_mortarela is None:
                         val_mortarela = 0.0
-
                 else:
-
                     val_mortarela = 0.0
 
 
@@ -1470,32 +1452,19 @@ elif menu_option == "Полив кожної рослини":
                 # ----------------------------------------------------
 
                 if col_romano:
-
-                    val_romano = (
-                        convert_to_number(
-                            row_data[col_romano]
-                        )
-                    )
-
+                    raw_val = row_data[col_romano]
+                    if hasattr(raw_val, "iloc"):
+                        raw_val = raw_val.iloc[0]
+                    val_romano = convert_to_number(raw_val)
                     if val_romano is None:
                         val_romano = 0.0
-
                 else:
-
                     val_romano = 0.0
 
 
                 # ====================================================
                 # ГОЛОВНИЙ РОЗРАХУНОК
                 # ====================================================
-
-                # Кількість дерев =
-                #
-                # Джифоні + Мортарела + Романо
-                #
-                # Наприклад:
-                #
-                # 1 + 1 + 1 = 3 дерева
 
                 total_calc_trees = (
                     val_jifoni
