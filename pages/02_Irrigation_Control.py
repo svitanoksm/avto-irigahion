@@ -31,7 +31,6 @@ def get_tuya_token():
         return None, None, None
 
     t = str(int(time.time() * 1000))
-    # Для токена рядок підпису: client_id + t
     message = client_id + t
     sign = hmac.new(
         secret.encode('utf-8'),
@@ -56,7 +55,7 @@ def get_tuya_token():
     return None, None, None
 
 def get_device_status(device_id):
-    """Отримання статусу пристрою (з правильним розрахунком sign для Tuya)"""
+    """Отримання статусу пристрою"""
     base_url, token, client_id = get_tuya_token()
     if not token:
         return []
@@ -64,8 +63,6 @@ def get_device_status(device_id):
     t = str(int(time.time() * 1000))
     secret = st.secrets["tuya"]["access_key"]
     
-    # Специфікація Tuya OpenAPI для GET: client_id + access_token + t + HTTPMethod + content_sha256 + sign_headers + url
-    # Для простого GET без body content_sha256 це хеш від пустої строки
     empty_hash = hashlib.sha256(b"").hexdigest()
     uri = f"/v1.0/iot-03/devices/{device_id}/status"
     
@@ -158,21 +155,22 @@ col_state, col_sched = st.columns([1, 2])
 with col_state:
     st.markdown("##### Керування з хмари")
     
-    new_breaker_state = st.toggle(
+    # Функція зворотного виклику для відправки команди при зміні стану тумблера
+    def on_toggle_change():
+        new_val = st.session_state.breaker_tuya_toggle
+        success = send_tuya_command(BREAKER_ID, switch_code, new_val)
+        if success:
+            st.toast("Команду успішно надіслано на пристрій!", icon="✅")
+        else:
+            st.error("Не вдалося виконати команду через хмару.")
+
+    # Тумблер тепер синхронізований зі статусом у хмарі без зайвих помилок
+    st.toggle(
         "Стан живлення", 
         value=current_power_state, 
-        key="breaker_tuya_toggle"
+        key="breaker_tuya_toggle",
+        on_change=on_toggle_change
     )
-    
-    if new_breaker_state != current_power_state:
-        with st.spinner("Надсилання команди на пристрій..."):
-            success = send_tuya_command(BREAKER_ID, switch_code, new_breaker_state)
-            if success:
-                st.success("Команду успішно виконано!")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error("Не вдалося виконати команду через хмару.")
 
     if current_power_state:
         st.success("Стан у хмарі: УВІМКНЕНО")
