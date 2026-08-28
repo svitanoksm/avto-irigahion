@@ -21,8 +21,8 @@ st.set_page_config(
 # ============================================================
 
 pg = st.navigation([
-    st.Page("app.py", title="Зрошення", icon="💧"),
     st.Page("pages/01_Field_Parameters.py", title="Параметри полів", icon="⚙️"),
+    # Якщо у вас є інші сторінки у папці pages, додайте їх сюди
 ])
 
 pg.run()
