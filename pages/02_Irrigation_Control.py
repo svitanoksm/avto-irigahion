@@ -125,7 +125,7 @@ def send_tuya_command(device_id, code, value):
         response = requests.post(base_url + uri, headers=headers, data=body_str)
         res = response.json()
         if not res.get("success"):
-            st.error(fВідповідь Tuya API: {res.get('msg')})
+            st.error(f"Відповідь Tuya API: {res.get('msg')}")
         return res.get("success", False)
     except Exception as e:
         st.error(f"Помилка надсилання: {e}")
@@ -143,7 +143,6 @@ except Exception:
 
 statuses = get_device_status(BREAKER_ID)
 
-# Виведемо на екран що саме повертає пристрій (для точної діагностики)
 with st.expander("🔍 Технічні дані пристрою від Tuya Cloud"):
     st.write(statuses)
 
