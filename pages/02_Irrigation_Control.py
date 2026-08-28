@@ -86,8 +86,8 @@ def get_device_status(device_id):
         res = response.json()
         if res.get("success"):
             return res.get("result", [])
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"Помилка отримання статусу: {e}")
     return []
 
 def send_tuya_command(device_id, code, value):
@@ -124,8 +124,11 @@ def send_tuya_command(device_id, code, value):
     try:
         response = requests.post(base_url + uri, headers=headers, data=body_str)
         res = response.json()
+        if not res.get("success"):
+            st.error(fВідповідь Tuya API: {res.get('msg')})
         return res.get("success", False)
-    except Exception:
+    except Exception as e:
+        st.error(f"Помилка надсилання: {e}")
         return False
 
 # --- ІНТЕРФЕЙС КОРИСТУВАЧА ---
@@ -139,13 +142,19 @@ except Exception:
     BREAKER_ID = "bf14f332c4049e5d89xot0"
 
 statuses = get_device_status(BREAKER_ID)
+
+# Виведемо на екран що саме повертає пристрій (для точної діагностики)
+with st.expander("🔍 Технічні дані пристрою від Tuya Cloud"):
+    st.write(statuses)
+
 current_power_state = False
 switch_code = "switch_1"
 
 for item in statuses:
-    if "switch" in item.get("code", ""):
-        switch_code = item["code"]
-        current_power_state = bool(item["value"])
+    code = item.get("code", "")
+    if "switch" in code:
+        switch_code = code
+        current_power_state = bool(item.get("value", False))
         break
 
 st.subheader("⚡ Автоматичний вимикач (1 свердловина Автоматичний вимикач)")
@@ -155,16 +164,12 @@ col_state, col_sched = st.columns([1, 2])
 with col_state:
     st.markdown("##### Керування з хмари")
     
-    # Функція зворотного виклику для відправки команди при зміні стану тумблера
     def on_toggle_change():
         new_val = st.session_state.breaker_tuya_toggle
         success = send_tuya_command(BREAKER_ID, switch_code, new_val)
         if success:
-            st.toast("Команду успішно надіслано на пристрій!", icon="✅")
-        else:
-            st.error("Не вдалося виконати команду через хмару.")
+            st.toast("Команду успішно надіслано!", icon="✅")
 
-    # Тумблер тепер синхронізований зі статусом у хмарі без зайвих помилок
     st.toggle(
         "Стан живлення", 
         value=current_power_state, 
