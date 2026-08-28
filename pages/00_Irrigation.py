@@ -1,3 +1,27 @@
+import streamlit as st
+import pandas as pd
+import gspread
+import altair as alt
+from google.oauth2.service_account import Credentials
+from PIL import Image
+
+st.set_page_config(
+    page_title="FMS AgronomOk - Зрошення",
+    page_icon="💧",
+    layout="wide",
+)
+
+# Навігація сторінки
+menu_option = st.sidebar.radio(
+    "Розділ",
+    [
+        "Головна панель",
+        "Поливні модулі",
+        "Полив кожної рослини",
+        "Параметри полів та систем",
+    ],
+)
+
 # ============================================================
 # НАЛАШТУВАННЯ GOOGLE SHEETS
 # ============================================================
@@ -146,91 +170,38 @@ client = gspread.authorize(creds)
 # ============================================================
 @st.cache_data(ttl=60)
 def load_data(spreadsheet_name, worksheet_name):
-  spreadsheet = client.open(spreadsheet_name)
-  sheet = spreadsheet.worksheet(worksheet_name)
+    spreadsheet = client.open(spreadsheet_name)
+    sheet = spreadsheet.worksheet(worksheet_name)
+    values = sheet.get_all_values(value_render_option="FORMATTED_VALUE")
+    if not values:
+        return pd.DataFrame()
+    headers = [str(h).strip() for h in values[0]]
+    rows = values[1:]
+    df = pd.DataFrame(rows, columns=headers)
 
-  values = sheet.get_all_values(value_render_option="FORMATTED_VALUE")
-
-  if not values:
-    return pd.DataFrame()
-
-  headers = [str(h).strip() for h in values[0]]
-  rows = values[1:]
-
-  return pd.DataFrame(rows, columns=headers)
-
-    # --------------------------------------------------------
-    # Дата та час
-    # --------------------------------------------------------
-
-    date_col = find_column(
-        df,
-        exact_names=["Дата та час"],
-        contains=["дата"],
-    )
-
+    date_col = find_column(df, exact_names=["Дата та час"], contains=["дата"])
     if date_col:
-        df["Дата та час"] = pd.to_datetime(
-            df[date_col],
-            errors="coerce",
-            dayfirst=True,
-        )
+        df["Дата та час"] = pd.to_datetime(df[date_col], errors="coerce", dayfirst=True)
 
-    # --------------------------------------------------------
-    # Потужність
-    # --------------------------------------------------------
-
-    power_col = find_column(
-        df,
-        exact_names=["Потужність за період, кВт/год"],
-        contains=["потужність"],
-    )
-
+    power_col = find_column(df, exact_names=["Потужність за період, кВт/год"], contains=["потужність"])
     if power_col:
-        df["Потужність за період, кВт/год"] = (
-            df[power_col].apply(convert_to_number)
-        )
+        df["Потужність за період, кВт/год"] = df[power_col].apply(convert_to_number)
 
-    # --------------------------------------------------------
-    # Продуктивність
-    # --------------------------------------------------------
-
-    flow_col = find_column(
-        df,
-        exact_names=[
-            "Продуктивність, куб. м./год",
-            "Продуктивність, куб. м/год",
-            "Продуктивність, м³/год",
-            "Продуктивність",
-        ],
-        contains=["продуктивність"],
-    )
-
+    flow_col = find_column(df, exact_names=[
+        "Продуктивність, куб. м./год", "Продуктивність, куб. м/год",
+        "Продуктивність, м³/год", "Продуктивність"], contains=["продуктивність"])
     if flow_col:
-        df["Продуктивність, куб. м./год"] = (
-            df[flow_col].apply(convert_to_number)
-        )
-
-    # --------------------------------------------------------
-    # Показники лічильників
-    # --------------------------------------------------------
+        df["Продуктивність, куб. м./год"] = df[flow_col].apply(convert_to_number)
 
     energy_col = find_energy_meter_column(df)
     if energy_col:
         df[energy_col] = df[energy_col].apply(convert_to_number)
-
     water_col = find_water_meter_column(df)
     if water_col:
         df[water_col] = df[water_col].apply(convert_to_number)
 
-    # --------------------------------------------------------
-    # Сортування за датою
-    # --------------------------------------------------------
-
     if "Дата та час" in df.columns:
-        df = df.sort_values(by="Дата та час")
-        df = df.reset_index(drop=True)
-
+        df = df.sort_values(by="Дата та час").reset_index(drop=True)
     return df
 
 
@@ -239,7 +210,7 @@ def load_data(spreadsheet_name, worksheet_name):
 # ============================================================
 
 try:
-    df = load_data()
+    df = load_data(SPREADSHEET_NAME, WORKSHEET_NAME)
 except Exception as e:
     st.error(f"Помилка завантаження даних з Google Таблиці: {e}")
     st.stop()
