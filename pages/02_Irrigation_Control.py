@@ -1324,7 +1324,7 @@ RELAY_CONFIG = [
 
     {
         "number": 1,
-        "name": "Реле 1",
+        "name": "Модуль 1-3",
         "device_id": RELAY_GROUP_ID,
         "switch_code": "switch_1",
         "countdown_code": "countdown_1",
@@ -1332,7 +1332,7 @@ RELAY_CONFIG = [
 
     {
         "number": 2,
-        "name": "Реле 2",
+        "name": "Модуль 1-4",
         "device_id": RELAY_GROUP_ID,
         "switch_code": "switch_2",
         "countdown_code": "countdown_2",
@@ -1340,7 +1340,7 @@ RELAY_CONFIG = [
 
     {
         "number": 3,
-        "name": "Реле 3",
+        "name": "Модуль 1-5",
         "device_id": RELAY_GROUP_ID,
         "switch_code": "switch_3",
         "countdown_code": "countdown_3",
@@ -1348,7 +1348,7 @@ RELAY_CONFIG = [
 
     {
         "number": 4,
-        "name": "Реле 4",
+        "name": "Резерв",
         "device_id": RELAY_GROUP_ID,
         "switch_code": "switch_4",
         "countdown_code": "countdown_4",
@@ -1356,7 +1356,7 @@ RELAY_CONFIG = [
 
     {
         "number": 5,
-        "name": "Реле 5",
+        "name": "Модуль 1-2",
         "device_id": RELAY_5_ID,
         "switch_code": "switch",
         "countdown_code": "countdown",
@@ -1364,7 +1364,7 @@ RELAY_CONFIG = [
 
     {
         "number": 6,
-        "name": "Реле 6",
+        "name": "Модуль 1-16",
         "device_id": RELAY_6_ID,
         "switch_code": "switch",
         "countdown_code": "countdown",
@@ -1372,7 +1372,7 @@ RELAY_CONFIG = [
 
     {
         "number": 7,
-        "name": "Реле 7",
+        "name": "Модуль 1-17",
         "device_id": RELAY_7_ID,
         "switch_code": "switch",
         "countdown_code": "countdown",
