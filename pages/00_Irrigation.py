@@ -1371,10 +1371,10 @@ elif menu_option == "Полив кожної рослини":
             if not matched_rows.empty:
                 row_data = matched_rows.iloc[0]
 
-                col_jifoni = next((c for c in df_params.columns if "джифон" in c.lower()), None)
-                col_mortarela = next((c for c in df_params.columns if "мортарел" in c.lower()), None)
-                col_romano = next((c for c in df_params.columns if "роман" in c.lower()), None)
-                col_culture = next((c for c in df_params.columns if "культур" in c.lower()), None)
+                col_jifoni = next((c for c in df_params.columns if "джифоні" in c.lower()), None)
+                col_mortarela = next((c for c in df_params.columns if "мортарела" in c.lower()), None)
+                col_romano = next((c for c in df_params.columns if "романо" in c.lower()), None)
+                col_culture = next((c for c in df_params.columns if "культура" in c.lower()), None)
 
                 if col_jifoni:
                     raw_val = row_data[col_jifoni]
