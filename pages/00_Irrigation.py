@@ -126,38 +126,38 @@ def find_water_meter_column(df):
 
 
 # ============================================================
-# ЗАВАНТАЖЕННЯ ДАНИХ
+# АВТОРИЗАЦІЯ (поза кешем)
 # ============================================================
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
+]
 
+creds_dict = dict(st.secrets["gcp_service_account"])
+creds = Credentials.from_service_account_info(
+    creds_dict,
+    scopes=scopes,
+)
+client = gspread.authorize(creds)
+
+
+# ============================================================
+# ЗАВАНТАЖЕННЯ ДАНИХ (кешуємо результат)
+# ============================================================
 @st.cache_data(ttl=60)
-def load_data():
+def load_data(spreadsheet_name, worksheet_name):
+  spreadsheet = client.open(spreadsheet_name)
+  sheet = spreadsheet.worksheet(worksheet_name)
 
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets.readonly",
-        "https://www.googleapis.com/auth/drive.readonly",
-    ]
+  values = sheet.get_all_values(value_render_option="FORMATTED_VALUE")
 
-    creds_dict = dict(st.secrets["gcp_service_account"])
+  if not values:
+    return pd.DataFrame()
 
-    creds = Credentials.from_service_account_info(
-        creds_dict,
-        scopes=scopes,
-    )
+  headers = [str(h).strip() for h in values[0]]
+  rows = values[1:]
 
-    client = gspread.authorize(creds)
-
-    spreadsheet = client.open(SPREADSHEET_NAME)
-    sheet = spreadsheet.worksheet(WORKSHEET_NAME)
-
-    values = sheet.get_all_values(value_render_option="FORMATTED_VALUE")
-
-    if not values:
-        return pd.DataFrame()
-
-    headers = [str(h).strip() for h in values[0]]
-    rows = values[1:]
-
-    df = pd.DataFrame(rows, columns=headers)
+  return pd.DataFrame(rows, columns=headers)
 
     # --------------------------------------------------------
     # Дата та час
