@@ -1347,7 +1347,6 @@ elif menu_option == "Полив кожної рослини":
         f"{selected_module}"
     )
 
-
     # ========================================================
     # ОТРИМАННЯ ПАРАМЕТРІВ МОДУЛЯ
     # ========================================================
@@ -1360,10 +1359,8 @@ elif menu_option == "Полив кожної рослини":
     val_romano = 0.0
 
     if not df_params.empty:
-        # Очищаємо назви стовпців від зайвих пробілів
         df_params.columns = [str(c).strip() for c in df_params.columns]
 
-        # Шукаємо стовпець з назвою модуля
         mod_param_col = next((c for c in df_params.columns if "модуль" in c.lower() and "зрош" in c.lower()), None)
         if not mod_param_col:
             mod_param_col = next((c for c in df_params.columns if "модуль" in c.lower()), None)
@@ -1374,13 +1371,11 @@ elif menu_option == "Полив кожної рослини":
             if not matched_rows.empty:
                 row_data = matched_rows.iloc[0]
 
-                # Найнадійніший пошук стовпців за фрагментами для конкретного рядка параметрів
                 col_jifoni = next((c for c in df_params.columns if "джифон" in c.lower()), None)
                 col_mortarela = next((c for c in df_params.columns if "мортарел" in c.lower()), None)
                 col_romano = next((c for c in df_params.columns if "роман" in c.lower()), None)
                 col_culture = next((c for c in df_params.columns if "культур" in c.lower()), None)
 
-                # Витягуємо значення безпечно
                 if col_jifoni:
                     raw_val = row_data[col_jifoni]
                     if hasattr(raw_val, "iloc"):
@@ -1404,17 +1399,9 @@ elif menu_option == "Полив кожної рослини":
                     if c_val and c_val.lower() not in ["nan", "none", ""]:
                         culture_name = c_val
 
-                # Загальна кількість дерев
                 total_calc_trees = val_jifoni + val_mortarela + val_romano
                 trees_count = int(round(total_calc_trees)) if total_calc_trees > 0 else 0
 
-                # Культура
-                if col_culture:
-                    c_val = str(row_data[col_culture]).strip()
-                    if c_val and c_val.lower() not in ["nan", "none", ""]:
-                        culture_name = c_val
-
-
     # ========================================================
     # ПЕРЕВІРКА КІЛЬКОСТІ ДЕРЕВ
     # ========================================================
@@ -1432,51 +1419,6 @@ elif menu_option == "Полив кожної рослини":
         )
 
         st.stop()
-
-
-                # ====================================================
-                # КУЛЬТУРА
-                # ====================================================
-
-                col_culture = find_column(
-                    df_params,
-                    contains=["культур"],
-                )
-
-                if (
-                    col_culture
-                    and pd.notna(
-                        row_data[col_culture]
-                    )
-                    and str(
-                        row_data[col_culture]
-                    ).strip()
-                    != ""
-                ):
-
-                    culture_name = str(
-                        row_data[col_culture]
-                    ).strip()
-
-
-    # ========================================================
-    # ПЕРЕВІРКА КІЛЬКОСТІ ДЕРЕВ
-    # ========================================================
-
-    if trees_count <= 0:
-
-        st.error(
-            "Не вдалося визначити кількість дерев "
-            f"для модуля «{selected_module}». "
-            "Перевірте стовпці "
-            "«Кількість Джифоні, шт», "
-            "«Кількість запилювача Мортарела, шт» "
-            "та «Кількість запилювача Романо, шт» "
-            "у таблиці «Параметри»."
-        )
-
-        st.stop()
-
 
     # ========================================================
     # ІНФОРМАЦІЯ ПРО КІЛЬКІСТЬ ДЕРЕВ
@@ -1490,7 +1432,6 @@ elif menu_option == "Полив кожної рослини":
         f"{int(val_romano)} Романо)"
     )
 
-
     # ========================================================
     # ФІЛЬТРАЦІЯ ДАНИХ МОДУЛЯ
     # ========================================================
@@ -1501,7 +1442,6 @@ elif menu_option == "Полив кожної рослини":
         .str.strip()
         == selected_module
     ].copy()
-
 
     if (
         "Дата та час"
@@ -1527,13 +1467,11 @@ elif menu_option == "Полив кожної рослини":
 
         max_date = pd.Timestamp.now()
 
-
     water_metric_col = (
         find_water_meter_column(
             df_filtered
         )
     )
-
 
     # ========================================================
     # ВОДА НА ОДНУ РОСЛИНУ ЗА КАЛЕНДАРНИЙ ПЕРІОД
@@ -1569,9 +1507,7 @@ elif menu_option == "Полив кожної рослини":
                 min(end_dt.day, 28),
             )
 
-
         sub_df = pd.DataFrame()
-
 
         if (
             "Дата та час"
@@ -1604,18 +1540,15 @@ elif menu_option == "Полив кожної рослини":
                 mask
             ]
 
-
         if sub_df.empty:
 
             return None
-
 
         total_m3 = 0.0
 
         days_count = (
             e_dt - s_dt
         ).days + 1
-
 
         # ----------------------------------------------------
         # Лічильник води
@@ -1641,7 +1574,6 @@ elif menu_option == "Полив кожної рослини":
                 total_m3 = float(
                     vals.iloc[0]
                 )
-
 
         # ----------------------------------------------------
         # Якщо немає лічильника —
@@ -1673,27 +1605,14 @@ elif menu_option == "Полив кожної рослини":
                     * hours
                 )
 
-
         if total_m3 <= 0:
 
             return None
-
-
-        # ====================================================
-        # ГОЛОВНЕ:
-        #
-        # загальна вода × 1000 / кількість дерев
-        #
-        # Наприклад:
-        #
-        # 30 м³ × 1000 / 3 = 10 000 л/дерево
-        # ====================================================
 
         return (
             total_m3
             * 1000
         ) / trees_count
-
 
     # ========================================================
     # ВОДА НА ОДНУ РОСЛИНУ ЗА ОСТАННІЙ ПЕРІОД
@@ -1718,9 +1637,7 @@ elif menu_option == "Полив кожної рослини":
             )
         )
 
-
         sub_df = pd.DataFrame()
-
 
         if (
             "Дата та час"
@@ -1747,9 +1664,7 @@ elif menu_option == "Полив кожної рослини":
                 mask
             ]
 
-
         total_m3 = 0.0
-
 
         # ----------------------------------------------------
         # Лічильник води
@@ -1778,7 +1693,6 @@ elif menu_option == "Полив кожної рослини":
                 total_m3 = float(
                     vals.iloc[0]
                 )
-
 
         # ----------------------------------------------------
         # Продуктивність
@@ -1812,26 +1726,14 @@ elif menu_option == "Полив кожної рослини":
                 * 0.3
             )
 
-
         if total_m3 <= 0:
 
             return 0.0
-
-
-        # ====================================================
-        # ГОЛОВНЕ:
-        #
-        # Загальна вода ділиться на ФАКТИЧНУ
-        # кількість дерев модуля.
-        #
-        # НЕ на 1000.
-        # ====================================================
 
         return (
             total_m3
             * 1000
         ) / trees_count
-
 
     # ========================================================
     # ВОДА ЗА ОСТАННІ 24 ГОДИНИ
@@ -1844,7 +1746,6 @@ elif menu_option == "Полив кожної рослини":
         )
     )
 
-
     # ========================================================
     # ЗОБРАЖЕННЯ + ПОКАЗНИКИ
     # ========================================================
@@ -1853,7 +1754,6 @@ elif menu_option == "Полив кожної рослини":
         [1, 2],
         gap="large",
     )
-
 
     # ========================================================
     # ЗОБРАЖЕННЯ
@@ -1888,7 +1788,6 @@ elif menu_option == "Полив кожної рослини":
                 "Перевірте наявність файлу."
             )
 
-
     # ========================================================
     # ПОКАЗНИКИ
     # ========================================================
@@ -1909,7 +1808,6 @@ elif menu_option == "Полив кожної рослини":
             "(поточний та 2 попередні роки)"
         )
 
-
         months_ua = {
             1: "січ",
             2: "лют",
@@ -1925,9 +1823,7 @@ elif menu_option == "Полив кожної рослини":
             12: "груд",
         }
 
-
         table_data = []
-
 
         current_year = (
             max_date.year
@@ -1935,11 +1831,9 @@ elif menu_option == "Полив кожної рослини":
             else pd.Timestamp.now().year
         )
 
-
         y_curr = current_year
         y_prev1 = current_year - 1
         y_prev2 = current_year - 2
-
 
         # ====================================================
         # 1-Й ТИЖДЕНЬ
@@ -1958,7 +1852,6 @@ elif menu_option == "Полив кожної рослини":
             1,
             4,
         )
-
 
         val_w1_curr = (
             get_water_per_tree_for_year_dates(
@@ -1984,29 +1877,24 @@ elif menu_option == "Полив кожної рослини":
             )
         )
 
-
         table_data.append(
             {
                 "Тиждень": (
                     "1 тиждень року"
                 ),
-
                 "Дати тижня": (
                     "1 січ – 4 січ"
                 ),
-
                 f"{y_prev2}": (
                     f"{val_w1_p2:.1f} л"
                     if val_w1_p2 is not None
                     else "-"
                 ),
-
                 f"{y_prev1}": (
                     f"{val_w1_p1:.1f} л"
                     if val_w1_p1 is not None
                     else "-"
                 ),
-
                 f"{y_curr} (поточний)": (
                     f"{val_w1_curr:.1f} л"
                     if val_w1_curr is not None
@@ -2014,7 +1902,6 @@ elif menu_option == "Полив кожної рослини":
                 ),
             }
         )
-
 
         # ====================================================
         # ТИЖНІ 2–52
@@ -2026,7 +1913,6 @@ elif menu_option == "Полив кожної рослини":
             5,
         )
 
-
         for w in range(
             2,
             53,
@@ -2036,7 +1922,6 @@ elif menu_option == "Полив кожної рослини":
                 current_monday
                 + pd.Timedelta(days=6)
             )
-
 
             if (
                 current_monday
@@ -2048,7 +1933,6 @@ elif menu_option == "Полив кожної рослини":
             ):
 
                 break
-
 
             if (
                 current_sunday
@@ -2065,14 +1949,12 @@ elif menu_option == "Полив кожної рослини":
                     31,
                 )
 
-
             date_str = (
                 f"{current_monday.day} "
                 f"{months_ua[current_monday.month]} – "
                 f"{current_sunday.day} "
                 f"{months_ua[current_sunday.month]}"
             )
-
 
             val_curr = (
                 get_water_per_tree_for_year_dates(
@@ -2098,27 +1980,22 @@ elif menu_option == "Полив кожної рослини":
                 )
             )
 
-
             table_data.append(
                 {
                     "Тиждень": (
                         f"{w} тиждень року"
                     ),
-
                     "Дати тижня": date_str,
-
                     f"{y_prev2}": (
                         f"{val_p2:.1f} л"
                         if val_p2 is not None
                         else "-"
                     ),
-
                     f"{y_prev1}": (
                         f"{val_p1:.1f} л"
                         if val_p1 is not None
                         else "-"
                     ),
-
                     f"{y_curr} (поточний)": (
                         f"{val_curr:.1f} л"
                         if val_curr is not None
@@ -2127,12 +2004,10 @@ elif menu_option == "Полив кожної рослини":
                 }
             )
 
-
             current_monday = (
                 current_sunday
                 + pd.Timedelta(days=1)
             )
-
 
         # ====================================================
         # ТАБЛИЦЯ
