@@ -32,7 +32,7 @@ def get_tuya_token():
 
     t = str(int(time.time() * 1000))
     
-    # Формування підпису за стандартами Tuya OpenAPI
+    # Для отримання токена в Tuya Cloud API рядок для підпису має формуватися як: client_id + t
     message = client_id + t
     sign = hmac.new(
         client_secret.encode('utf-8'),
@@ -67,9 +67,12 @@ def get_device_status(device_id):
         return []
 
     t = str(int(time.time() * 1000))
+    secret = st.secrets["tuya"]["access_key"]
+    
+    # Для запитів з access_token підпис формується за стандартами Tuya: client_id + token + t
     message = client_id + token + t
     sign = hmac.new(
-        st.secrets["tuya"]["access_key"].encode('utf-8'),
+        secret.encode('utf-8'),
         message.encode('utf-8'),
         hashlib.sha256
     ).hexdigest().upper()
@@ -98,6 +101,8 @@ def send_tuya_command(device_id, code, value):
         return False
 
     t = str(int(time.time() * 1000))
+    secret = st.secrets["tuya"]["access_key"]
+    
     body = {"commands": [{"code": code, "value": value}]}
     body_str = json.dumps(body)
     
@@ -105,7 +110,7 @@ def send_tuya_command(device_id, code, value):
     string_to_sign = client_id + token + t + "POST\n" + content_sha256 + "\n\n/v1.0/iot-03/devices/" + device_id + "/commands"
     
     sign = hmac.new(
-        st.secrets["tuya"]["access_key"].encode('utf-8'),
+        secret.encode('utf-8'),
         string_to_sign.encode('utf-8'),
         hashlib.sha256
     ).hexdigest().upper()
