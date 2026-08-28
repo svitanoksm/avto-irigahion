@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
-import gspread
-import datetime
 import time
 import logging
+import gspread
 
+from datetime import datetime, time as dt_time
+from zoneinfo import ZoneInfo
 from google.oauth2.service_account import Credentials
 from tuya_connector import TuyaOpenAPI, TUYA_LOGGER
 
@@ -30,14 +31,24 @@ MAX_SCHEDULES = 30
 
 TIMEZONE_ID = "Europe/Kyiv"
 
-SCHEDULE_SHEET_NAME = "Розклад для керування Свердловинами"
-
 SPREADSHEET_URL = (
     "https://docs.google.com/spreadsheets/d/"
     "1qF-7THB566lqOyQV0f6xuB052IRHh8s4CHMUpuN82P4/"
     "edit"
 )
 
+SCHEDULE_WORKSHEET_NAME = (
+    "Розклад для керування Свердловинами"
+)
+
+REQUIRED_SCHEDULE_COLUMNS = [
+    "час",
+    "дія",
+    "дні тижня",
+    "активність",
+    "дата та час останнього виконання",
+    "Свердловина",
+]
 
 WEEKDAYS = [
     "Понеділок",
@@ -49,15 +60,735 @@ WEEKDAYS = [
     "Неділя",
 ]
 
+KYIV_TZ = ZoneInfo(TIMEZONE_ID)
 
-REQUIRED_COLUMNS = [
-    "час",
-    "дія",
-    "дні тижня",
-    "активність",
-    "дата та час останнього виконання",
-    "Свердловина",
-]
+
+# ============================================================
+# GOOGLE SHEETS
+# ============================================================
+
+@st.cache_resource
+def init_google_sheets():
+    """
+    Підключення до Google Sheets
+    через service account зі st.secrets.
+    """
+
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    try:
+
+        if "gcp_service_account" not in st.secrets:
+
+            st.error(
+                "❌ У st.secrets не знайдено "
+                "`gcp_service_account`."
+            )
+
+            return None
+
+        creds_dict = dict(
+            st.secrets["gcp_service_account"]
+        )
+
+        credentials = (
+            Credentials
+            .from_service_account_info(
+                creds_dict,
+                scopes=scope
+            )
+        )
+
+        client = gspread.authorize(
+            credentials
+        )
+
+        spreadsheet = client.open_by_url(
+            SPREADSHEET_URL
+        )
+
+        return spreadsheet
+
+    except Exception as e:
+
+        st.error(
+            "❌ Не вдалося підключитися "
+            "до Google Таблиці."
+        )
+
+        st.code(
+            str(e)
+        )
+
+        return None
+
+
+def get_schedule_worksheet():
+
+    try:
+
+        spreadsheet = init_google_sheets()
+
+        if spreadsheet is None:
+            return None
+
+        return spreadsheet.worksheet(
+            SCHEDULE_WORKSHEET_NAME
+        )
+
+    except gspread.WorksheetNotFound:
+
+        st.error(
+            "❌ Не знайдено аркуш "
+            f"`{SCHEDULE_WORKSHEET_NAME}`."
+        )
+
+        return None
+
+    except Exception as e:
+
+        st.error(
+            "❌ Помилка відкриття аркуша."
+        )
+
+        st.code(
+            str(e)
+        )
+
+        return None
+
+
+# ============================================================
+# ПІДГОТОВКА DATAFRAME
+# ============================================================
+
+def empty_schedule_dataframe():
+
+    return pd.DataFrame(
+        columns=REQUIRED_SCHEDULE_COLUMNS
+    )
+
+
+def prepare_schedule_dataframe(df):
+
+    if df is None:
+
+        return empty_schedule_dataframe()
+
+    df = df.copy()
+
+    for column in REQUIRED_SCHEDULE_COLUMNS:
+
+        if column not in df.columns:
+
+            df[column] = ""
+
+    return df[
+        REQUIRED_SCHEDULE_COLUMNS
+    ]
+
+
+# ============================================================
+# ЗАВАНТАЖЕННЯ РОЗКЛАДУ
+# ============================================================
+
+def load_schedule():
+
+    try:
+
+        worksheet = get_schedule_worksheet()
+
+        if worksheet is None:
+
+            return empty_schedule_dataframe()
+
+        records = worksheet.get_all_records()
+
+        if not records:
+
+            return empty_schedule_dataframe()
+
+        df = pd.DataFrame(records)
+
+        return prepare_schedule_dataframe(
+            df
+        )
+
+    except Exception as e:
+
+        st.error(
+            "❌ Помилка завантаження "
+            "розкладу."
+        )
+
+        st.code(
+            str(e)
+        )
+
+        return empty_schedule_dataframe()
+
+
+# ============================================================
+# ЗБЕРЕЖЕННЯ ВСЬОГО РОЗКЛАДУ
+# ============================================================
+
+def save_schedule(df):
+
+    try:
+
+        worksheet = get_schedule_worksheet()
+
+        if worksheet is None:
+
+            return False
+
+        df = prepare_schedule_dataframe(
+            df
+        )
+
+        if len(df) > MAX_SCHEDULES:
+
+            st.error(
+                f"❌ Не можна зберегти більше "
+                f"{MAX_SCHEDULES} завдань."
+            )
+
+            return False
+
+        data_to_write = [
+            REQUIRED_SCHEDULE_COLUMNS
+        ]
+
+        for _, row in df.iterrows():
+
+            data_to_write.append(
+                [
+                    str(
+                        row.get(
+                            "час",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        row.get(
+                            "дія",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        row.get(
+                            "дні тижня",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        row.get(
+                            "активність",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        row.get(
+                            "дата та час останнього виконання",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        row.get(
+                            "Свердловина",
+                            ""
+                        )
+                    ),
+                ]
+            )
+
+        worksheet.clear()
+
+        worksheet.update(
+            data_to_write,
+            "A1"
+        )
+
+        return True
+
+    except Exception as e:
+
+        st.error(
+            "❌ Помилка збереження "
+            "розкладу."
+        )
+
+        st.code(
+            str(e)
+        )
+
+        return False
+
+
+# ============================================================
+# НОРМАЛІЗАЦІЯ АКТИВНОСТІ
+# ============================================================
+
+def normalize_activity(value):
+    """
+    Перетворює різні варіанти TRUE/FALSE
+    з Google Sheets у Python bool.
+    """
+
+    if isinstance(
+        value,
+        bool
+    ):
+
+        return value
+
+    if value is None:
+
+        return False
+
+    text = str(
+        value
+    ).strip().lower()
+
+    return text in [
+        "true",
+        "1",
+        "yes",
+        "так",
+        "active",
+        "активне",
+        "активна",
+    ]
+
+
+# ============================================================
+# НОРМАЛІЗАЦІЯ ДІЇ
+# ============================================================
+
+def action_to_bool(action):
+
+    text = str(
+        action
+    ).strip().lower()
+
+    if text in [
+        "увімкнути",
+        "включити",
+        "on",
+        "true",
+        "1",
+    ]:
+
+        return True
+
+    if text in [
+        "вимкнути",
+        "выключить",
+        "off",
+        "false",
+        "0",
+    ]:
+
+        return False
+
+    return None
+
+
+# ============================================================
+# ПЕРЕТВОРЕННЯ ДНЯ ТИЖНЯ
+# ============================================================
+
+def get_today_weekday():
+
+    now = datetime.now(
+        KYIV_TZ
+    )
+
+    return WEEKDAYS[
+        now.weekday()
+    ]
+
+
+def task_is_for_today(days_text):
+
+    text = str(
+        days_text
+    ).strip()
+
+    # Порожнє поле = одноразове завдання
+    if not text:
+
+        return True
+
+    if text.lower() == "одноразово":
+
+        return True
+
+    today = get_today_weekday()
+
+    # Підтримуємо формат:
+    # "Понеділок, Середа, П'ятниця"
+
+    selected_days = [
+        item.strip()
+        for item in text.split(",")
+        if item.strip()
+    ]
+
+    return today in selected_days
+
+
+# ============================================================
+# РОЗБІР ЧАСУ
+# ============================================================
+
+def parse_schedule_time(value):
+
+    if isinstance(
+        value,
+        dt_time
+    ):
+
+        return value
+
+    if value is None:
+
+        return None
+
+    text = str(
+        value
+    ).strip()
+
+    if not text:
+
+        return None
+
+    formats = [
+        "%H:%M",
+        "%H:%M:%S",
+    ]
+
+    for fmt in formats:
+
+        try:
+
+            return datetime.strptime(
+                text,
+                fmt
+            ).time()
+
+        except ValueError:
+
+            pass
+
+    return None
+
+
+# ============================================================
+# ПЕРЕВІРКА ЧИ ЗАВДАННЯ ВЖЕ ВИКОНУВАЛОСЯ СЬОГОДНІ
+# ============================================================
+
+def executed_today(
+    last_execution,
+    now
+):
+
+    if last_execution is None:
+
+        return False
+
+    text = str(
+        last_execution
+    ).strip()
+
+    if not text:
+
+        return False
+
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d.%m.%Y %H:%M:%S",
+        "%d.%m.%Y %H:%M",
+    ]
+
+    for fmt in formats:
+
+        try:
+
+            previous = datetime.strptime(
+                text,
+                fmt
+            )
+
+            return (
+                previous.date()
+                == now.date()
+            )
+
+        except ValueError:
+
+            pass
+
+    return False
+
+
+# ============================================================
+# ОНОВЛЕННЯ ОДНІЄЇ КЛІТИНКИ GOOGLE SHEETS
+# ============================================================
+
+def update_schedule_cell(
+    row_number,
+    column_number,
+    value
+):
+
+    try:
+
+        worksheet = get_schedule_worksheet()
+
+        if worksheet is None:
+
+            return False
+
+        worksheet.update_cell(
+            row_number,
+            column_number,
+            value
+        )
+
+        return True
+
+    except Exception as e:
+
+        logging.error(
+            "Помилка оновлення Google Sheets: %s",
+            e
+        )
+
+        return False
+
+
+# ============================================================
+# ДОДАВАННЯ ЗАВДАННЯ
+# ============================================================
+
+def add_schedule_task(
+    schedule_time,
+    action,
+    selected_days,
+    active,
+    well
+):
+
+    df = load_schedule()
+
+    df = prepare_schedule_dataframe(
+        df
+    )
+
+    if len(df) >= MAX_SCHEDULES:
+
+        return (
+            False,
+            f"Досягнуто максимуму "
+            f"{MAX_SCHEDULES} завдань."
+        )
+
+    days_text = ", ".join(
+        selected_days
+    )
+
+    new_row = {
+        "час": schedule_time.strftime(
+            "%H:%M"
+        ),
+
+        "дія": action,
+
+        "дні тижня": days_text,
+
+        "активність": (
+            "TRUE"
+            if active
+            else
+            "FALSE"
+        ),
+
+        "дата та час останнього виконання": "",
+
+        "Свердловина": str(
+            well
+        ),
+    }
+
+    df = pd.concat(
+        [
+            df,
+            pd.DataFrame(
+                [new_row]
+            ),
+        ],
+        ignore_index=True
+    )
+
+    success = save_schedule(
+        df
+    )
+
+    if success:
+
+        return (
+            True,
+            "Завдання успішно додано."
+        )
+
+    return (
+        False,
+        "Не вдалося зберегти завдання."
+    )
+
+
+# ============================================================
+# ВИДАЛЕННЯ ЗАВДАННЯ
+# ============================================================
+
+def delete_schedule_task(
+    index
+):
+
+    df = load_schedule()
+
+    df = prepare_schedule_dataframe(
+        df
+    )
+
+    if index < 0 or index >= len(df):
+
+        return False
+
+    df = df.drop(
+        index
+    ).reset_index(
+        drop=True
+    )
+
+    return save_schedule(
+        df
+    )
+
+
+# ============================================================
+# ЗМІНА АКТИВНОСТІ
+# ============================================================
+
+def change_schedule_activity(
+    index,
+    active
+):
+
+    df = load_schedule()
+
+    df = prepare_schedule_dataframe(
+        df
+    )
+
+    if index < 0 or index >= len(df):
+
+        return False
+
+    df.at[
+        index,
+        "активність"
+    ] = (
+        "TRUE"
+        if active
+        else
+        "FALSE"
+    )
+
+    return save_schedule(
+        df
+    )
+
+
+# ============================================================
+# РЕДАГУВАННЯ ЗАВДАННЯ
+# ============================================================
+
+def update_schedule_task(
+    index,
+    schedule_time,
+    action,
+    selected_days,
+    active,
+    well,
+    last_execution
+):
+
+    df = load_schedule()
+
+    df = prepare_schedule_dataframe(
+        df
+    )
+
+    if index < 0 or index >= len(df):
+
+        return False
+
+    df.at[
+        index,
+        "час"
+    ] = schedule_time.strftime(
+        "%H:%M"
+    )
+
+    df.at[
+        index,
+        "дія"
+    ] = action
+
+    df.at[
+        index,
+        "дні тижня"
+    ] = ", ".join(
+        selected_days
+    )
+
+    df.at[
+        index,
+        "активність"
+    ] = (
+        "TRUE"
+        if active
+        else
+        "FALSE"
+    )
+
+    df.at[
+        index,
+        "Свердловина"
+    ] = str(
+        well
+    )
+
+    # Зберігаємо історію виконання
+    df.at[
+        index,
+        "дата та час останнього виконання"
+    ] = last_execution
+
+    return save_schedule(
+        df
+    )
 
 
 # ============================================================
@@ -68,7 +799,9 @@ def get_tuya_settings():
 
     try:
 
-        conf = st.secrets["tuya"]
+        conf = st.secrets[
+            "tuya"
+        ]
 
         access_id = str(
             conf["access_id"]
@@ -96,13 +829,20 @@ def get_tuya_settings():
     except Exception as e:
 
         st.error(
-            "❌ Не вдалося прочитати налаштування Tuya."
+            "❌ Не вдалося прочитати "
+            "налаштування Tuya."
         )
 
-        st.code(str(e))
+        st.code(
+            str(e)
+        )
 
         st.stop()
 
+
+# ============================================================
+# TUYA — ПІДКЛЮЧЕННЯ
+# ============================================================
 
 @st.cache_resource
 def create_tuya_api(
@@ -126,6 +866,10 @@ def create_tuya_api(
     return api
 
 
+# ============================================================
+# TUYA ПАРАМЕТРИ
+# ============================================================
+
 (
     ACCESS_ID,
     ACCESS_KEY,
@@ -133,6 +877,10 @@ def create_tuya_api(
     BREAKER_ID
 ) = get_tuya_settings()
 
+
+# ============================================================
+# ПІДКЛЮЧЕННЯ TUYA
+# ============================================================
 
 try:
 
@@ -145,10 +893,13 @@ try:
 except Exception as e:
 
     st.error(
-        "❌ Не вдалося підключитися до Tuya Cloud."
+        "❌ Не вдалося підключитися "
+        "до Tuya Cloud."
     )
 
-    st.code(str(e))
+    st.code(
+        str(e)
+    )
 
     st.stop()
 
@@ -161,9 +912,16 @@ def tuya_get(uri):
 
     try:
 
-        return tuya.get(uri)
+        return tuya.get(
+            uri
+        )
 
     except Exception as e:
+
+        logging.error(
+            "Tuya GET error: %s",
+            e
+        )
 
         return None
 
@@ -186,15 +944,16 @@ def tuya_post(
 
     except Exception as e:
 
-        st.error(
-            f"Помилка надсилання команди Tuya: {e}"
+        logging.error(
+            "Tuya POST error: %s",
+            e
         )
 
         return None
 
 
 # ============================================================
-# ОТРИМАННЯ ПОТОЧНОГО СТАНУ
+# ПОТОЧНИЙ СТАН АВТОМАТА
 # ============================================================
 
 def get_switch_state():
@@ -204,18 +963,21 @@ def get_switch_state():
         f"{BREAKER_ID}/status"
     )
 
-    response = tuya_get(uri)
+    response = tuya_get(
+        uri
+    )
 
     if not isinstance(
         response,
         dict
     ):
+
         return None
 
     if not response.get(
-        "success",
-        False
+        "success"
     ):
+
         return None
 
     statuses = response.get(
@@ -223,19 +985,7 @@ def get_switch_state():
         []
     )
 
-    if not isinstance(
-        statuses,
-        list
-    ):
-        return None
-
     for item in statuses:
-
-        if not isinstance(
-            item,
-            dict
-        ):
-            continue
 
         if item.get(
             "code"
@@ -256,12 +1006,20 @@ def get_switch_state():
 
 
 # ============================================================
-# КОМАНДА УВІМКНУТИ / ВИМКНУТИ
+# КОМАНДА TUYA
 # ============================================================
 
 def set_switch_state(
     state
 ):
+
+    """
+    Єдина функція керування автоматом.
+
+    Використовується:
+    1. ручним керуванням;
+    2. планувальником.
+    """
 
     uri = (
         f"/v1.0/iot-03/devices/"
@@ -272,7 +1030,9 @@ def set_switch_state(
         "commands": [
             {
                 "code": SWITCH_CODE,
-                "value": bool(state)
+                "value": bool(
+                    state
+                ),
             }
         ]
     }
@@ -286,6 +1046,7 @@ def set_switch_state(
         response,
         dict
     ):
+
         return False
 
     return bool(
@@ -297,635 +1058,278 @@ def set_switch_state(
 
 
 # ============================================================
-# GOOGLE SHEETS
+# ПЛАНУВАЛЬНИК
 # ============================================================
 
-@st.cache_resource
-def init_google_sheets():
+def execute_due_tasks():
 
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
+    """
+    Перевіряє Google Таблицю.
 
-    if "gcp_service_account" not in st.secrets:
-
-        return None
-
-    creds_dict = dict(
-        st.secrets["gcp_service_account"]
-    )
-
-    creds = Credentials.from_service_account_info(
-        creds_dict,
-        scopes=scope
-    )
-
-    client = gspread.authorize(
-        creds
-    )
-
-    return client.open_by_url(
-        SPREADSHEET_URL
-    )
-
-
-# ============================================================
-# ОТРИМАННЯ АРКУША РОЗКЛАДУ
-# ============================================================
-
-def get_schedule_worksheet():
+    Якщо настав час завдання:
+    - визначає дію;
+    - відправляє команду Tuya;
+    - записує дату/час виконання;
+    - одноразове завдання вимикає.
+    """
 
     try:
 
-        sh = init_google_sheets()
+        worksheet = get_schedule_worksheet()
 
-        if not sh:
+        if worksheet is None:
 
-            return None
+            return []
 
-        try:
+        records = worksheet.get_all_records()
 
-            worksheet = sh.worksheet(
-                SCHEDULE_SHEET_NAME
-            )
+        if not records:
 
-        except Exception:
+            return []
 
-            worksheet = sh.add_worksheet(
-                title=SCHEDULE_SHEET_NAME,
-                rows=100,
-                cols=len(REQUIRED_COLUMNS)
-            )
-
-            worksheet.update(
-                "A1",
-                [REQUIRED_COLUMNS]
-            )
-
-        return worksheet
-
-    except Exception as e:
-
-        st.error(
-            "❌ Не вдалося підключитися "
-            "до аркуша розкладу."
+        now = datetime.now(
+            KYIV_TZ
         )
 
-        st.code(str(e))
-
-        return None
-
-
-# ============================================================
-# ЗАВАНТАЖЕННЯ РОЗКЛАДУ
-# ============================================================
-
-def load_schedule():
-
-    worksheet = get_schedule_worksheet()
-
-    if worksheet is None:
-
-        return pd.DataFrame(
-            columns=REQUIRED_COLUMNS
+        current_time = now.strftime(
+            "%H:%M"
         )
 
-    try:
-
-        values = worksheet.get_all_values()
-
-        if not values:
-
-            worksheet.update(
-                "A1",
-                [REQUIRED_COLUMNS]
-            )
-
-            return pd.DataFrame(
-                columns=REQUIRED_COLUMNS
-            )
-
-        headers = values[0]
-
-        # ----------------------------------------------------
-        # Якщо якихось колонок немає — додаємо їх
-        # ----------------------------------------------------
-
-        changed = False
-
-        for column in REQUIRED_COLUMNS:
-
-            if column not in headers:
-
-                headers.append(column)
-
-                changed = True
-
-        if changed:
-
-            worksheet.update(
-                "A1",
-                [headers]
-            )
-
-            values = worksheet.get_all_values()
-
-        if len(values) <= 1:
-
-            return pd.DataFrame(
-                columns=headers
-            )
-
-        df = pd.DataFrame(
-            values[1:],
-            columns=headers
-        )
-
-        # ----------------------------------------------------
-        # Залишаємо тільки перші 30 завдань
-        # ----------------------------------------------------
-
-        df = df.head(
-            MAX_SCHEDULES
-        )
-
-        return df
-
-    except Exception as e:
-
-        st.error(
-            "❌ Помилка читання розкладу."
-        )
-
-        st.code(str(e))
-
-        return pd.DataFrame(
-            columns=REQUIRED_COLUMNS
-        )
-
-
-# ============================================================
-# ЗБЕРЕЖЕННЯ РОЗКЛАДУ
-# ============================================================
-
-def save_schedule(df):
-
-    worksheet = get_schedule_worksheet()
-
-    if worksheet is None:
-
-        return False
-
-    try:
-
-        # ----------------------------------------------------
-        # Гарантуємо наявність усіх колонок
-        # ----------------------------------------------------
-
-        for column in REQUIRED_COLUMNS:
-
-            if column not in df.columns:
-
-                df[column] = ""
-
-        df = df[
-            REQUIRED_COLUMNS
+        today = WEEKDAYS[
+            now.weekday()
         ]
 
-        df = df.fillna("")
+        executed_tasks = []
 
-        data = [
-            REQUIRED_COLUMNS
-        ]
+        for index, row in enumerate(
+            records
+        ):
 
-        for _, row in df.iterrows():
+            # Рядок Google Sheets:
+            # 1 = заголовок
+            # 2 = перше завдання
+            sheet_row = index + 2
 
-            data.append(
-                [
-                    str(row[column])
-                    for column in REQUIRED_COLUMNS
+            active = normalize_activity(
+                row.get(
+                    "активність",
+                    ""
+                )
+            )
+
+            if not active:
+
+                continue
+
+            task_time = parse_schedule_time(
+                row.get(
+                    "час",
+                    ""
+                )
+            )
+
+            if task_time is None:
+
+                continue
+
+            task_time_text = task_time.strftime(
+                "%H:%M"
+            )
+
+            # Ще не настав час
+            if task_time_text != current_time:
+
+                continue
+
+            days_text = str(
+                row.get(
+                    "дні тижня",
+                    ""
+                )
+            ).strip()
+
+            # Перевірка дня
+            if days_text:
+
+                selected_days = [
+                    item.strip()
+                    for item in days_text.split(",")
+                    if item.strip()
                 ]
-            )
 
-        worksheet.clear()
+                if today not in selected_days:
 
-        worksheet.update(
-            "A1",
-            data
-        )
+                    continue
 
-        return True
-
-    except Exception as e:
-
-        st.error(
-            "❌ Помилка збереження розкладу."
-        )
-
-        st.code(str(e))
-
-        return False
-
-
-# ============================================================
-# ДОПОМІЖНІ ФУНКЦІЇ
-# ============================================================
-
-def normalize_action(value):
-
-    text = str(
-        value
-    ).strip().lower()
-
-    if text in [
-        "увімкнути",
-        "включити",
-        "on",
-        "true",
-        "1",
-        "🟢 увімкнути",
-        "🟢 увімкнути",
-    ]:
-
-        return "Увімкнути"
-
-    if text in [
-        "вимкнути",
-        "відключити",
-        "off",
-        "false",
-        "0",
-        "🔴 вимкнути",
-        "🔴 вимкнути",
-    ]:
-
-        return "Вимкнути"
-
-    return text.capitalize()
-
-
-def normalize_activity(value):
-
-    text = str(
-        value
-    ).strip().lower()
-
-    if text in [
-        "",
-        "true",
-        "1",
-        "так",
-        "активне",
-        "активна",
-        "active",
-        "yes",
-        "🟢 активне",
-    ]:
-
-        return True
-
-    if text in [
-        "false",
-        "0",
-        "ні",
-        "неактивне",
-        "неактивна",
-        "inactive",
-        "no",
-        "⏸️ вимкнене",
-    ]:
-
-        return False
-
-    return True
-
-
-def normalize_days(value):
-
-    if value is None:
-
-        return []
-
-    text = str(
-        value
-    ).strip()
-
-    if not text:
-
-        return []
-
-    if text.lower() in [
-        "одноразово",
-        "разово",
-    ]:
-
-        return []
-
-    result = []
-
-    for day in WEEKDAYS:
-
-        if day in text:
-
-            result.append(day)
-
-    return result
-
-
-def days_to_text(days):
-
-    if not days:
-
-        return "Одноразово"
-
-    return ", ".join(days)
-
-
-def parse_time(value):
-
-    if isinstance(
-        value,
-        datetime.time
-    ):
-
-        return value
-
-    text = str(
-        value
-    ).strip()
-
-    if not text:
-
-        return None
-
-    formats = [
-        "%H:%M",
-        "%H:%M:%S",
-    ]
-
-    for fmt in formats:
-
-        try:
-
-            return datetime.datetime.strptime(
-                text,
-                fmt
-            ).time()
-
-        except ValueError:
-
-            pass
-
-    return None
-
-
-def current_weekday_name():
-
-    return WEEKDAYS[
-        datetime.datetime.now().weekday()
-    ]
-
-
-# ============================================================
-# ПЕРЕВІРКА — ЧИ ТРЕБА ВИКОНАТИ ЗАВДАННЯ
-# ============================================================
-
-def should_execute_schedule(
-    row
-):
-
-    activity = normalize_activity(
-        row.get(
-            "активність",
-            ""
-        )
-    )
-
-    if not activity:
-
-        return False
-
-    task_time = parse_time(
-        row.get(
-            "час",
-            ""
-        )
-    )
-
-    if task_time is None:
-
-        return False
-
-    now = datetime.datetime.now()
-
-    # --------------------------------------------------------
-    # Перевіряємо годину та хвилину
-    # --------------------------------------------------------
-
-    if now.hour != task_time.hour:
-
-        return False
-
-    if now.minute != task_time.minute:
-
-        return False
-
-    # --------------------------------------------------------
-    # Перевіряємо день
-    # --------------------------------------------------------
-
-    selected_days = normalize_days(
-        row.get(
-            "дні тижня",
-            ""
-        )
-    )
-
-    today_name = current_weekday_name()
-
-    # --------------------------------------------------------
-    # Повторюване завдання
-    # --------------------------------------------------------
-
-    if selected_days:
-
-        if today_name not in selected_days:
-
-            return False
-
-    # --------------------------------------------------------
-    # Одноразове завдання
-    # --------------------------------------------------------
-
-    else:
-
-        last_execution = str(
-            row.get(
+            # Перевірка, чи вже виконувалось
+            last_execution = row.get(
                 "дата та час останнього виконання",
                 ""
             )
-        ).strip()
 
-        # Якщо вже виконувалося —
-        # вдруге не виконуємо.
-        if last_execution:
+            if executed_today(
+                last_execution,
+                now
+            ):
 
-            try:
+                continue
 
-                last_dt = datetime.datetime.fromisoformat(
-                    last_execution
+            action = action_to_bool(
+                row.get(
+                    "дія",
+                    ""
+                )
+            )
+
+            if action is None:
+
+                logging.warning(
+                    "Невідома дія у рядку %s",
+                    sheet_row
                 )
 
-                if (
-                    last_dt.date()
-                    == now.date()
-                ):
+                continue
 
-                    return False
+            well = str(
+                row.get(
+                    "Свердловина",
+                    ""
+                )
+            ).strip()
 
-            except Exception:
+            # ------------------------------------------------
+            # ЗАРАЗ ПІДТРИМУЄМО СВЕРДЛОВИНУ 1
+            # ------------------------------------------------
 
-                pass
+            if well not in [
+                "",
+                "1",
+                "Свердловина 1",
+            ]:
 
-    # --------------------------------------------------------
-    # Захист від повторного виконання
-    # --------------------------------------------------------
+                continue
 
-    last_execution = str(
-        row.get(
-            "дата та час останнього виконання",
-            ""
-        )
-    ).strip()
+            # ------------------------------------------------
+            # ВІДПРАВЛЯЄМО КОМАНДУ TUYA
+            # ------------------------------------------------
 
-    if last_execution:
-
-        try:
-
-            last_dt = datetime.datetime.fromisoformat(
-                last_execution
+            success = set_switch_state(
+                action
             )
 
-            difference = (
-                now - last_dt
-            ).total_seconds()
+            if not success:
 
-            # Не дозволяємо повторно
-            # виконувати завдання протягом
-            # 60 секунд.
-            if difference < 60:
+                logging.error(
+                    "Не вдалося виконати "
+                    "завдання у рядку %s",
+                    sheet_row
+                )
 
-                return False
+                continue
 
-        except Exception:
+            # ------------------------------------------------
+            # ЗАПИС ЧАСУ ВИКОНАННЯ
+            # ------------------------------------------------
 
-            pass
-
-    return True
-
-
-# ============================================================
-# ВИКОНАННЯ РОЗКЛАДУ
-# ============================================================
-
-def execute_schedules(
-    df
-):
-
-    if df.empty:
-
-        return df, False
-
-    changed = False
-
-    now = datetime.datetime.now()
-
-    for index in range(
-        len(df)
-    ):
-
-        row = df.iloc[
-            index
-        ]
-
-        if not should_execute_schedule(
-            row
-        ):
-
-            continue
-
-        action = normalize_action(
-            row.get(
-                "дія",
-                ""
-            )
-        )
-
-        # ----------------------------------------------------
-        # Визначаємо команду
-        # ----------------------------------------------------
-
-        if action == "Увімкнути":
-
-            target_state = True
-
-        elif action == "Вимкнути":
-
-            target_state = False
-
-        else:
-
-            continue
-
-        # ----------------------------------------------------
-        # Виконуємо команду Tuya
-        # ----------------------------------------------------
-
-        success = set_switch_state(
-            target_state
-        )
-
-        if success:
-
-            timestamp = now.strftime(
+            execution_time = now.strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
 
-            df.at[
-                index,
-                "дата та час останнього виконання"
-            ] = timestamp
+            update_schedule_cell(
+                sheet_row,
+                5,
+                execution_time
+            )
 
-            changed = True
+            # ------------------------------------------------
+            # ОДНОРАЗОВЕ ЗАВДАННЯ
+            # ------------------------------------------------
 
-    return df, changed
+            if not days_text:
+
+                update_schedule_cell(
+                    sheet_row,
+                    4,
+                    "FALSE"
+                )
+
+            executed_tasks.append(
+                {
+                    "row": sheet_row,
+                    "time": task_time_text,
+                    "action": (
+                        "Увімкнути"
+                        if action
+                        else
+                        "Вимкнути"
+                    ),
+                    "well": well or "1",
+                }
+            )
+
+        return executed_tasks
+
+    except Exception as e:
+
+        logging.error(
+            "Помилка планувальника: %s",
+            e
+        )
+
+        return []
 
 
 # ============================================================
-# ЗАВАНТАЖЕННЯ РОЗКЛАДУ
+# АВТОМАТИЧНИЙ ПЛАНУВАЛЬНИК
 # ============================================================
 
-schedule_df = load_schedule()
-
-
-# ============================================================
-# АВТОМАТИЧНИЙ ЗАПУСК РОЗКЛАДУ
-# ============================================================
-
-schedule_df, schedule_changed = execute_schedules(
-    schedule_df
+@st.fragment(
+    run_every="30s"
 )
+def scheduler():
 
-if schedule_changed:
+    executed = execute_due_tasks()
 
-    save_schedule(
-        schedule_df
+    now = datetime.now(
+        KYIV_TZ
+    )
+
+    if executed:
+
+        for task in executed:
+
+            if task["action"] == "Увімкнути":
+
+                st.success(
+                    f"⏰ {task['time']} — "
+                    f"Свердловина {task['well']}: "
+                    f"🟢 автомат увімкнено"
+                )
+
+            else:
+
+                st.success(
+                    f"⏰ {task['time']} — "
+                    f"Свердловина {task['well']}: "
+                    f"🔴 автомат вимкнено"
+                )
+
+    st.caption(
+        "🕐 Планувальник активний. "
+        f"Поточний час: "
+        f"{now.strftime('%d.%m.%Y %H:%M:%S')}"
     )
 
 
 # ============================================================
-# ІНТЕРФЕЙС
+# ПОТОЧНИЙ СТАН
+# ============================================================
+
+current_state = get_switch_state()
+
+
+# ============================================================
+# ЗАГОЛОВОК
 # ============================================================
 
 st.title(
@@ -940,8 +1344,6 @@ st.subheader(
 # ============================================================
 # ПОТОЧНИЙ СТАН
 # ============================================================
-
-current_state = get_switch_state()
 
 st.markdown(
     "### ⚡ Автоматичний вимикач"
@@ -996,9 +1398,11 @@ with control_col:
             key="main_switch_on"
         ):
 
-            if set_switch_state(
+            success = set_switch_state(
                 True
-            ):
+            )
+
+            if success:
 
                 st.success(
                     "Автомат увімкнено."
@@ -1013,7 +1417,8 @@ with control_col:
             else:
 
                 st.error(
-                    "Не вдалося увімкнути автомат."
+                    "Не вдалося увімкнути "
+                    "автомат."
                 )
 
     with off_col:
@@ -1024,9 +1429,11 @@ with control_col:
             key="main_switch_off"
         ):
 
-            if set_switch_state(
+            success = set_switch_state(
                 False
-            ):
+            )
+
+            if success:
 
                 st.success(
                     "Автомат вимкнено."
@@ -1041,8 +1448,16 @@ with control_col:
             else:
 
                 st.error(
-                    "Не вдалося вимкнути автомат."
+                    "Не вдалося вимкнути "
+                    "автомат."
                 )
+
+
+# ============================================================
+# ЗАПУСК ПЛАНУВАЛЬНИКА
+# ============================================================
+
+scheduler()
 
 
 # ============================================================
@@ -1056,7 +1471,24 @@ st.subheader(
 )
 
 st.caption(
-    f"Максимальна кількість завдань: {MAX_SCHEDULES}"
+    "Завдання зберігаються у Google Таблиці "
+    "«Розклад для керування Свердловинами»."
+)
+
+schedule_df = load_schedule()
+
+schedule_df = prepare_schedule_dataframe(
+    schedule_df
+)
+
+
+# ============================================================
+# КІЛЬКІСТЬ
+# ============================================================
+
+st.write(
+    f"Створено завдань: "
+    f"**{len(schedule_df)} / {MAX_SCHEDULES}**"
 )
 
 
@@ -1083,8 +1515,8 @@ if len(schedule_df) < MAX_SCHEDULES:
             with col1:
 
                 schedule_time = st.time_input(
-                    "Час",
-                    value=datetime.time(
+                    "Час виконання",
+                    value=dt_time(
                         8,
                         0
                     )
@@ -1096,7 +1528,7 @@ if len(schedule_df) < MAX_SCHEDULES:
                     "Дія",
                     [
                         "Увімкнути",
-                        "Вимкнути"
+                        "Вимкнути",
                     ]
                 )
 
@@ -1104,25 +1536,30 @@ if len(schedule_df) < MAX_SCHEDULES:
                 "Дні тижня",
                 WEEKDAYS,
                 help=(
-                    "Якщо не вибрати день, "
+                    "Якщо не вибрати жодного дня, "
                     "завдання буде одноразовим."
                 )
             )
 
-            active = st.checkbox(
-                "Завдання активне",
-                value=True
+            col3, col4 = st.columns(
+                2
             )
 
-            well = st.selectbox(
-                "Свердловина",
-                [
-                    "Свердловина 1",
-                    "Свердловина 2",
-                    "Свердловина 3",
-                    "Інша"
-                ]
-            )
+            with col3:
+
+                active = st.checkbox(
+                    "Активне завдання",
+                    value=True
+                )
+
+            with col4:
+
+                well = st.selectbox(
+                    "Свердловина",
+                    [
+                        "1"
+                    ]
+                )
 
             submitted = st.form_submit_button(
                 "💾 Додати завдання",
@@ -1132,45 +1569,20 @@ if len(schedule_df) < MAX_SCHEDULES:
 
             if submitted:
 
-                new_row = {
-                    "час": schedule_time.strftime(
-                        "%H:%M"
-                    ),
-
-                    "дія": action,
-
-                    "дні тижня": days_to_text(
-                        selected_days
-                    ),
-
-                    "активність": (
-                        "Так"
-                        if active
-                        else
-                        "Ні"
-                    ),
-
-                    "дата та час останнього виконання": "",
-
-                    "Свердловина": well,
-                }
-
-                schedule_df = pd.concat(
-                    [
-                        schedule_df,
-                        pd.DataFrame(
-                            [new_row]
-                        )
-                    ],
-                    ignore_index=True
+                result, message = (
+                    add_schedule_task(
+                        schedule_time,
+                        action,
+                        selected_days,
+                        active,
+                        well
+                    )
                 )
 
-                if save_schedule(
-                    schedule_df
-                ):
+                if result:
 
                     st.success(
-                        "✅ Завдання додано до розкладу."
+                        f"✅ {message}"
                     )
 
                     time.sleep(
@@ -1182,13 +1594,14 @@ if len(schedule_df) < MAX_SCHEDULES:
                 else:
 
                     st.error(
-                        "❌ Не вдалося зберегти завдання."
+                        f"❌ {message}"
                     )
 
 else:
 
     st.warning(
-        f"Досягнуто ліміт у {MAX_SCHEDULES} завдань."
+        f"Досягнуто максимальну кількість "
+        f"завдань: {MAX_SCHEDULES}."
     )
 
 
@@ -1206,39 +1619,35 @@ st.subheader(
 if schedule_df.empty:
 
     st.info(
-        "У розкладі поки немає жодного завдання."
+        "Завдань поки немає. "
+        "Натисніть «➕ Додати завдання» "
+        "вище, щоб створити перше."
     )
 
 else:
 
-    for index in range(
-        len(schedule_df)
-    ):
+    for index, row in schedule_df.iterrows():
 
-        row = schedule_df.iloc[
-            index
-        ]
-
-        task_time = str(
+        schedule_time = str(
             row.get(
                 "час",
                 ""
             )
-        )
+        ).strip()
 
-        action = normalize_action(
+        action = str(
             row.get(
                 "дія",
                 ""
             )
-        )
+        ).strip()
 
-        days = normalize_days(
+        days = str(
             row.get(
                 "дні тижня",
                 ""
             )
-        )
+        ).strip()
 
         activity = normalize_activity(
             row.get(
@@ -1247,6 +1656,13 @@ else:
             )
         )
 
+        well = str(
+            row.get(
+                "Свердловина",
+                ""
+            )
+        ).strip()
+
         last_execution = str(
             row.get(
                 "дата та час останнього виконання",
@@ -1254,72 +1670,71 @@ else:
             )
         ).strip()
 
-        well = str(
-            row.get(
-                "Свердловина",
-                "Свердловина 1"
-            )
-        ).strip()
-
         if not well:
 
-            well = "Свердловина 1"
+            well = "1"
 
-        # ----------------------------------------------------
-        # Контейнер завдання
-        # ----------------------------------------------------
+        if action == "Увімкнути":
+
+            action_text = (
+                "🟢 Увімкнути"
+            )
+
+        elif action == "Вимкнути":
+
+            action_text = (
+                "🔴 Вимкнути"
+            )
+
+        else:
+
+            action_text = action
+
+        if days:
+
+            days_text = days
+
+        else:
+
+            days_text = "Одноразово"
 
         with st.container(
             border=True
         ):
 
-            c1, c2, c3, c4 = st.columns(
-                [0.7, 1.4, 2.2, 1.4]
+            col1, col2, col3, col4 = (
+                st.columns(
+                    [0.5, 1.5, 1.5, 1.5]
+                )
             )
 
-            with c1:
+            with col1:
 
                 st.markdown(
                     f"### {index + 1}"
                 )
 
-            with c2:
+            with col2:
 
                 st.markdown(
-                    f"### {task_time}"
+                    f"**Свердловина {well}**"
                 )
 
-                if action == "Увімкнути":
+                st.caption(
+                    days_text
+                )
 
-                    st.caption(
-                        "🟢 Увімкнути"
-                    )
-
-                elif action == "Вимкнути":
-
-                    st.caption(
-                        "🔴 Вимкнути"
-                    )
-
-            with c3:
+            with col3:
 
                 st.markdown(
-                    f"**{well}**"
+                    f"### {schedule_time}"
                 )
 
-                if days:
+                st.caption(
+                    action_text
+                )
 
-                    st.caption(
-                        ", ".join(days)
-                    )
-
-                else:
-
-                    st.caption(
-                        "Одноразове завдання"
-                    )
-
-            with c4:
+            with col4:
 
                 if activity:
 
@@ -1333,10 +1748,6 @@ else:
                         "⏸️ Вимкнене"
                     )
 
-            # ------------------------------------------------
-            # Останнє виконання
-            # ------------------------------------------------
-
             if last_execution:
 
                 st.caption(
@@ -1344,105 +1755,44 @@ else:
                     f"{last_execution}"
                 )
 
-            else:
-
-                st.caption(
-                    "Останнє виконання: ще не виконувалось"
+            button1, button2, button3 = (
+                st.columns(
+                    3
                 )
-
-            # ------------------------------------------------
-            # Кнопки
-            # ------------------------------------------------
-
-            b1, b2, b3 = st.columns(
-                3
             )
 
-            with b1:
+            # ------------------------------------------------
+            # АКТИВНІСТЬ
+            # ------------------------------------------------
 
-                if st.button(
-                    (
-                        "⏸️ Вимкнути"
-                        if activity
-                        else
-                        "▶️ Увімкнути"
-                    ),
-                    key=f"activity_{index}",
-                    use_container_width=True
-                ):
+            with button1:
 
-                    schedule_df.at[
-                        index,
-                        "активність"
-                    ] = (
-                        "Ні"
-                        if activity
-                        else
-                        "Так"
-                    )
+                if activity:
 
-                    if save_schedule(
-                        schedule_df
+                    if st.button(
+                        "⏸️ Вимкнути",
+                        key=(
+                            f"disable_schedule_"
+                            f"{index}"
+                        ),
+                        use_container_width=True
                     ):
 
-                        st.rerun()
-
-            with b2:
-
-                if st.button(
-                    "▶️ Виконати зараз",
-                    key=f"execute_{index}",
-                    use_container_width=True
-                ):
-
-                    if action == "Увімкнути":
-
-                        target_state = True
-
-                    elif action == "Вимкнути":
-
-                        target_state = False
-
-                    else:
-
-                        target_state = None
-
-                    if target_state is None:
-
-                        st.error(
-                            "Невідома дія."
-                        )
-
-                    else:
-
-                        success = set_switch_state(
-                            target_state
+                        success = (
+                            change_schedule_activity(
+                                index,
+                                False
+                            )
                         )
 
                         if success:
 
-                            timestamp = (
-                                datetime.datetime.now()
-                                .strftime(
-                                    "%Y-%m-%d %H:%M:%S"
-                                )
-                            )
-
-                            schedule_df.at[
-                                index,
-                                "дата та час останнього виконання"
-                            ] = timestamp
-
-                            save_schedule(
-                                schedule_df
-                            )
-
                             st.success(
-                                "Команду виконано."
+                                "Завдання вимкнено."
                             )
 
                             time.sleep(
-                                0.5
+                                0.4
                             )
 
                             st.rerun()
@@ -1450,48 +1800,269 @@ else:
                         else:
 
                             st.error(
-                                "Не вдалося виконати команду."
+                                "Не вдалося змінити "
+                                "активність."
                             )
 
-            with b3:
+                else:
+
+                    if st.button(
+                        "▶️ Увімкнути",
+                        key=(
+                            f"enable_schedule_"
+                            f"{index}"
+                        ),
+                        use_container_width=True
+                    ):
+
+                        success = (
+                            change_schedule_activity(
+                                index,
+                                True
+                            )
+                        )
+
+                        if success:
+
+                            st.success(
+                                "Завдання увімкнено."
+                            )
+
+                            time.sleep(
+                                0.4
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            st.error(
+                                "Не вдалося змінити "
+                                "активність."
+                            )
+
+            # ------------------------------------------------
+            # РЕДАГУВАННЯ
+            # ------------------------------------------------
+
+            with button2:
 
                 if st.button(
-                    "🗑️ Видалити",
-                    key=f"delete_{index}",
+                    "✏️ Редагувати",
+                    key=(
+                        f"edit_schedule_"
+                        f"{index}"
+                    ),
                     use_container_width=True
                 ):
 
-                    schedule_df = schedule_df.drop(
-                        index
-                    ).reset_index(
-                        drop=True
+                    st.session_state[
+                        f"editing_schedule_{index}"
+                    ] = True
+
+                    st.rerun()
+
+            # ------------------------------------------------
+            # ВИДАЛЕННЯ
+            # ------------------------------------------------
+
+            with button3:
+
+                if st.button(
+                    "🗑️ Видалити",
+                    key=(
+                        f"delete_schedule_"
+                        f"{index}"
+                    ),
+                    use_container_width=True
+                ):
+
+                    success = (
+                        delete_schedule_task(
+                            index
+                        )
                     )
 
-                    if save_schedule(
-                        schedule_df
-                    ):
+                    if success:
 
                         st.success(
                             "Завдання видалено."
                         )
 
                         time.sleep(
-                            0.5
+                            0.4
                         )
+
+                        st.rerun()
+
+                    else:
+
+                        st.error(
+                            "Не вдалося видалити "
+                            "завдання."
+                        )
+
+            # ------------------------------------------------
+            # РЕДАГУВАННЯ
+            # ------------------------------------------------
+
+            if st.session_state.get(
+                f"editing_schedule_{index}",
+                False
+            ):
+
+                st.markdown(
+                    "#### ✏️ Редагування завдання"
+                )
+
+                parsed_time = parse_schedule_time(
+                    schedule_time
+                )
+
+                if parsed_time is None:
+
+                    parsed_time = dt_time(
+                        8,
+                        0
+                    )
+
+                current_days = []
+
+                if days:
+
+                    for day in WEEKDAYS:
+
+                        if day in days:
+
+                            current_days.append(
+                                day
+                            )
+
+                current_action_index = (
+                    0
+                    if action
+                    == "Увімкнути"
+                    else
+                    1
+                )
+
+                with st.form(
+                    key=(
+                        f"edit_form_{index}"
+                    )
+                ):
+
+                    edit_time = st.time_input(
+                        "Час",
+                        value=parsed_time
+                    )
+
+                    edit_action = st.selectbox(
+                        "Дія",
+                        [
+                            "Увімкнути",
+                            "Вимкнути",
+                        ],
+                        index=current_action_index
+                    )
+
+                    edit_days = st.multiselect(
+                        "Дні тижня",
+                        WEEKDAYS,
+                        default=current_days
+                    )
+
+                    edit_active = st.checkbox(
+                        "Активне",
+                        value=activity
+                    )
+
+                    edit_well = st.selectbox(
+                        "Свердловина",
+                        [
+                            "1"
+                        ],
+                        index=0
+                    )
+
+                    edit_col1, edit_col2 = (
+                        st.columns(2)
+                    )
+
+                    with edit_col1:
+
+                        save_edit = (
+                            st.form_submit_button(
+                                "💾 Зберегти",
+                                use_container_width=True,
+                                type="primary"
+                            )
+                        )
+
+                    with edit_col2:
+
+                        cancel_edit = (
+                            st.form_submit_button(
+                                "❌ Скасувати",
+                                use_container_width=True
+                            )
+                        )
+
+                    if save_edit:
+
+                        success = (
+                            update_schedule_task(
+                                index,
+                                edit_time,
+                                edit_action,
+                                edit_days,
+                                edit_active,
+                                edit_well,
+                                last_execution
+                            )
+                        )
+
+                        if success:
+
+                            st.session_state[
+                                f"editing_schedule_{index}"
+                            ] = False
+
+                            st.success(
+                                "Зміни збережено."
+                            )
+
+                            time.sleep(
+                                0.4
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            st.error(
+                                "Не вдалося зберегти "
+                                "зміни."
+                            )
+
+                    if cancel_edit:
+
+                        st.session_state[
+                            f"editing_schedule_{index}"
+                        ] = False
 
                         st.rerun()
 
 
 # ============================================================
-# РУЧНЕ ОНОВЛЕННЯ
+# ОНОВЛЕННЯ
 # ============================================================
 
 st.markdown("---")
 
 if st.button(
-    "🔄 Оновити стан і перевірити розклад",
+    "🔄 Оновити стан і розклад",
     use_container_width=True
 ):
 
     st.rerun()
-```
