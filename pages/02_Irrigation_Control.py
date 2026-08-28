@@ -11,32 +11,42 @@ from tuya_connector import TuyaOpenAPI, TUYA_LOGGER
 # ============================================================
 
 st.set_page_config(
-    page_title="Керування приладами та іригацією",
-    page_icon="🎛️",
+    page_title="Керування зрошенням",
+    page_icon="💧",
     layout="wide",
 )
 
 
-st.title("🎛️ Панель керування приладами")
+# ============================================================
+# КОНСТАНТИ
+# ============================================================
 
-st.markdown(
-    """
-    Керування обладнанням **1 свердловини**
-    через Tuya Cloud API.
-    """
-)
+SWITCH_CODE = "switch"
+
+MAX_SCHEDULES = 30
+
+# Часова зона України
+TIMEZONE_ID = "Europe/Kyiv"
+
+# Поточний UTC+3 у літній період.
+# Tuya використовує timezone_id для роботи з часовою зоною.
+TIME_ZONE = "+03:00"
+
+# Категорія таймерів
+TIMER_CATEGORY = "timer"
 
 
 # ============================================================
-# НАЛАШТУВАННЯ TUYA
+# ЗАГАЛЬНІ ФУНКЦІЇ
 # ============================================================
 
 def get_tuya_settings():
     """
-    Читає параметри Tuya з st.secrets.
+    Отримання налаштувань Tuya зі st.secrets.
     """
 
     try:
+
         conf = st.secrets["tuya"]
 
         access_id = str(
@@ -65,24 +75,15 @@ def get_tuya_settings():
     except Exception as e:
 
         st.error(
-            "❌ Помилка читання налаштувань Tuya."
+            "❌ Не вдалося прочитати налаштування Tuya."
         )
 
         st.code(
             str(e)
         )
 
-        return (
-            None,
-            None,
-            None,
-            None
-        )
+        st.stop()
 
-
-# ============================================================
-# СТВОРЕННЯ ПІДКЛЮЧЕННЯ TUYA
-# ============================================================
 
 @st.cache_resource
 def create_tuya_api(
@@ -91,37 +92,26 @@ def create_tuya_api(
     access_key
 ):
     """
-    Створює підключення до Tuya Cloud
-    через офіційний Python SDK.
+    Створення підключення до Tuya Cloud.
     """
 
-    try:
+    TUYA_LOGGER.setLevel(
+        logging.ERROR
+    )
 
-        # Не показуємо зайві службові повідомлення SDK
-        TUYA_LOGGER.setLevel(
-            logging.ERROR
-        )
+    api = TuyaOpenAPI(
+        endpoint,
+        access_id,
+        access_key
+    )
 
-        api = TuyaOpenAPI(
-            endpoint,
-            access_id,
-            access_key
-        )
+    api.connect()
 
-        # Отримання Access Token
-        api.connect()
-
-        return api
-
-    except Exception as e:
-
-        raise RuntimeError(
-            f"Не вдалося підключитися до Tuya Cloud: {e}"
-        )
+    return api
 
 
 # ============================================================
-# ОТРИМАННЯ НАЛАШТУВАНЬ
+# ПІДКЛЮЧЕННЯ TUYA
 # ============================================================
 
 (
@@ -132,46 +122,6 @@ def create_tuya_api(
 ) = get_tuya_settings()
 
 
-if not ACCESS_ID:
-
-    st.error(
-        "❌ Не задано Access ID."
-    )
-
-    st.stop()
-
-
-if not ACCESS_KEY:
-
-    st.error(
-        "❌ Не задано Access Secret."
-    )
-
-    st.stop()
-
-
-if not API_ENDPOINT:
-
-    st.error(
-        "❌ Не задано endpoint Tuya."
-    )
-
-    st.stop()
-
-
-if not BREAKER_ID:
-
-    st.error(
-        "❌ Не задано Device ID."
-    )
-
-    st.stop()
-
-
-# ============================================================
-# ПІДКЛЮЧЕННЯ
-# ============================================================
-
 try:
 
     tuya = create_tuya_api(
@@ -180,106 +130,47 @@ try:
         ACCESS_KEY
     )
 
-    st.success(
-        "🟢 Підключення до Tuya Cloud успішне"
-    )
-
 except Exception as e:
 
     st.error(
-        "❌ Підключення до Tuya Cloud не вдалося."
+        "❌ Не вдалося підключитися до Tuya Cloud."
     )
 
     st.code(
         str(e)
     )
 
-    st.info(
-        """
-        Перевірте:
-
-        • Access ID
-        • Access Secret
-        • endpoint
-        • авторизацію API у Tuya Cloud Project
-        """
-    )
-
     st.stop()
 
 
 # ============================================================
-# ТЕХНІЧНІ ПАРАМЕТРИ
-# ============================================================
-
-with st.expander(
-    "🔧 Технічні параметри підключення",
-    expanded=False
-):
-
-    st.write(
-        "**Data Center / Endpoint:**"
-    )
-
-    st.code(
-        API_ENDPOINT
-    )
-
-    st.write(
-        "**Access ID:**"
-    )
-
-    st.code(
-        ACCESS_ID
-    )
-
-    st.write(
-        "**Device ID:**"
-    )
-
-    st.code(
-        BREAKER_ID
-    )
-
-    st.write(
-        "**Access Secret:**"
-    )
-
-    st.code(
-        "••••••••••••••••••••••••••••••••"
-    )
-
-
-# ============================================================
-# ФУНКЦІЯ GET
+# API GET
 # ============================================================
 
 def tuya_get(
     uri
 ):
     """
-    GET-запит до Tuya Cloud.
+    GET-запит до Tuya.
     """
 
     try:
 
-        response = tuya.get(
+        return tuya.get(
             uri
         )
-
-        return response
 
     except Exception as e:
 
         st.error(
-            f"❌ Помилка GET-запиту: {e}"
+            f"Помилка Tuya GET: {e}"
         )
 
         return None
 
 
 # ============================================================
-# ФУНКЦІЯ POST
+# API POST
 # ============================================================
 
 def tuya_post(
@@ -287,831 +178,690 @@ def tuya_post(
     body
 ):
     """
-    POST-запит до Tuya Cloud.
+    POST-запит до Tuya.
     """
 
     try:
 
-        response = tuya.post(
+        return tuya.post(
             uri,
             body
         )
 
-        return response
-
     except Exception as e:
 
         st.error(
-            f"❌ Помилка POST-запиту: {e}"
+            f"Помилка Tuya POST: {e}"
         )
 
         return None
 
 
 # ============================================================
-# ОТРИМАННЯ ІНФОРМАЦІЇ ПРО ПРИСТРІЙ
+# API PUT
 # ============================================================
 
-device_uri = (
-    f"/v1.0/iot-03/devices/{BREAKER_ID}"
-)
-
-device_response = tuya_get(
-    device_uri
-)
-
-
-device_data = {}
-
-
-if isinstance(
-    device_response,
-    dict
+def tuya_put(
+    uri,
+    body
 ):
+    """
+    PUT-запит до Tuya.
+    """
 
-    if device_response.get(
-        "success"
-    ):
+    try:
 
-        device_data = (
-            device_response.get(
-                "result",
-                {}
-            )
+        return tuya.put(
+            uri,
+            body
         )
 
-    else:
+    except Exception as e:
 
         st.error(
-            "❌ Tuya не повернула інформацію "
-            "про пристрій."
+            f"Помилка Tuya PUT: {e}"
         )
 
-        with st.expander(
-            "Деталі відповіді Tuya"
-        ):
+        return None
 
-            st.json(
-                device_response
+
+# ============================================================
+# API DELETE
+# ============================================================
+
+def tuya_delete(
+    uri
+):
+    """
+    DELETE-запит до Tuya.
+    """
+
+    try:
+
+        return tuya.delete(
+            uri
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Помилка Tuya DELETE: {e}"
+        )
+
+        return None
+
+
+# ============================================================
+# ОТРИМАННЯ ПОТОЧНОГО СТАНУ АВТОМАТА
+# ============================================================
+
+def get_switch_state():
+    """
+    Отримує реальний стан DP switch.
+    """
+
+    uri = (
+        f"/v1.0/iot-03/devices/"
+        f"{BREAKER_ID}/status"
+    )
+
+    response = tuya_get(
+        uri
+    )
+
+    if not isinstance(
+        response,
+        dict
+    ):
+        return None
+
+    if not response.get(
+        "success"
+    ):
+        return None
+
+    statuses = response.get(
+        "result",
+        []
+    )
+
+    for item in statuses:
+
+        if item.get(
+            "code"
+        ) == SWITCH_CODE:
+
+            value = item.get(
+                "value"
             )
+
+            if isinstance(
+                value,
+                bool
+            ):
+
+                return value
+
+    return None
+
+
+# ============================================================
+# КЕРУВАННЯ АВТОМАТОМ
+# ============================================================
+
+def set_switch_state(
+    state
+):
+    """
+    Вмикає або вимикає автомат.
+    """
+
+    uri = (
+        f"/v1.0/iot-03/devices/"
+        f"{BREAKER_ID}/commands"
+    )
+
+    body = {
+        "commands": [
+            {
+                "code": SWITCH_CODE,
+                "value": state
+            }
+        ]
+    }
+
+    response = tuya_post(
+        uri,
+        body
+    )
+
+    if not isinstance(
+        response,
+        dict
+    ):
+        return False
+
+    return bool(
+        response.get(
+            "success",
+            False
+        )
+    )
+
+
+# ============================================================
+# ДОПОМІЖНІ ФУНКЦІЇ ДЛЯ РОЗКЛАДУ
+# ============================================================
+
+WEEKDAYS = [
+    "Понеділок",
+    "Вівторок",
+    "Середа",
+    "Четвер",
+    "П'ятниця",
+    "Субота",
+    "Неділя",
+]
+
+
+def days_to_loops(
+    selected_days
+):
+    """
+    Перетворює дні тижня у формат Tuya.
+
+    Tuya:
+    0000000 = немає повторення
+    1000000 = неділя
+    0100000 = понеділок
+    0010000 = вівторок
+    ...
+    0000001 = субота
+
+    Тобто порядок:
+    Нд Пн Вт Ср Чт Пт Сб
+    """
+
+    day_indexes = {
+        "Неділя": 0,
+        "Понеділок": 1,
+        "Вівторок": 2,
+        "Середа": 3,
+        "Четвер": 4,
+        "П'ятниця": 5,
+        "Субота": 6,
+    }
+
+    loops = [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+    ]
+
+    for day in selected_days:
+
+        if day in day_indexes:
+
+            index = day_indexes[day]
+
+            loops[index] = "1"
+
+    return "".join(
+        loops
+    )
+
+
+def loops_to_days(
+    loops
+):
+    """
+    Перетворює Tuya loops у назви днів.
+    """
+
+    if not loops:
+        return []
+
+    if loops == "0000000":
+        return []
+
+    names = [
+        "Неділя",
+        "Понеділок",
+        "Вівторок",
+        "Середа",
+        "Четвер",
+        "П'ятниця",
+        "Субота",
+    ]
+
+    result = []
+
+    for index, value in enumerate(
+        loops
+    ):
+
+        if value == "1":
+
+            result.append(
+                names[index]
+            )
+
+    return result
+
+
+def format_days(
+    loops
+):
+    """
+    Гарно відображає дні.
+    """
+
+    days = loops_to_days(
+        loops
+    )
+
+    if not days:
+
+        return "Одноразово"
+
+    return ", ".join(
+        days
+    )
+
+
+# ============================================================
+# ОТРИМАННЯ РОЗКЛАДУ TUYA
+# ============================================================
+
+def get_schedules():
+    """
+    Отримує всі таймери пристрою.
+
+    Використовується Tuya Timer API.
+    """
+
+    uri = (
+        f"/v1.0/devices/"
+        f"{BREAKER_ID}/timers"
+    )
+
+    response = tuya_get(
+        uri
+    )
+
+    if not isinstance(
+        response,
+        dict
+    ):
+        return []
+
+    if not response.get(
+        "success"
+    ):
+        return []
+
+    result = response.get(
+        "result",
+        []
+    )
+
+    schedules = []
+
+    # У Tuya відповідь може бути
+    # вкладена у groups.
+    if isinstance(
+        result,
+        list
+    ):
+
+        for group in result:
+
+            if not isinstance(
+                group,
+                dict
+            ):
+                continue
+
+            groups = group.get(
+                "groups",
+                []
+            )
+
+            if groups:
+
+                for timer_group in groups:
+
+                    if not isinstance(
+                        timer_group,
+                        dict
+                    ):
+                        continue
+
+                    timers = timer_group.get(
+                        "timers",
+                        []
+                    )
+
+                    for timer in timers:
+
+                        timer_copy = dict(
+                            timer
+                        )
+
+                        timer_copy[
+                            "group_id"
+                        ] = timer_group.get(
+                            "group_id"
+                        )
+
+                        timer_copy[
+                            "group_alias"
+                        ] = timer_group.get(
+                            "alias_name",
+                            ""
+                        )
+
+                        schedules.append(
+                            timer_copy
+                        )
+
+            else:
+
+                timers = group.get(
+                    "timers",
+                    []
+                )
+
+                for timer in timers:
+
+                    schedules.append(
+                        timer
+                    )
+
+    return schedules
+
+
+# ============================================================
+# ДОДАВАННЯ РОЗКЛАДУ
+# ============================================================
+
+def add_schedule(
+    name,
+    schedule_time,
+    selected_days,
+    switch_state
+):
+    """
+    Створює один таймер у Tuya Cloud.
+    """
+
+    loops = days_to_loops(
+        selected_days
+    )
+
+    # Якщо дні не вибрані,
+    # це одноразове завдання.
+    if not selected_days:
+
+        loops = "0000000"
+
+    body = {
+        "category": TIMER_CATEGORY,
+        "loops": loops,
+        "time_zone": TIME_ZONE,
+        "timezone_id": TIMEZONE_ID,
+        "alias_name": name,
+        "instruct": [
+            {
+                "functions": [
+                    {
+                        "code": SWITCH_CODE,
+                        "value": switch_state
+                    }
+                ],
+                "date": "",
+                "time": (
+                    f"{schedule_time.hour}:"
+                    f"{schedule_time.minute}"
+                )
+            }
+        ]
+    }
+
+    uri = (
+        f"/v1.0/devices/"
+        f"{BREAKER_ID}/timers"
+    )
+
+    response = tuya_post(
+        uri,
+        body
+    )
+
+    return response
+
+
+# ============================================================
+# ВИДАЛЕННЯ РОЗКЛАДУ
+# ============================================================
+
+def delete_schedule(
+    group_id
+):
+    """
+    Видаляє групу таймера.
+    """
+
+    if not group_id:
+        return False
+
+    uri = (
+        f"/v1.0/devices/"
+        f"{BREAKER_ID}/timers/"
+        f"categories/{TIMER_CATEGORY}/"
+        f"groups/{group_id}"
+    )
+
+    response = tuya_delete(
+        uri
+    )
+
+    if not isinstance(
+        response,
+        dict
+    ):
+        return False
+
+    return bool(
+        response.get(
+            "success",
+            False
+        )
+    )
+
+
+# ============================================================
+# УВІМКНЕННЯ / ВИМКНЕННЯ РОЗКЛАДУ
+# ============================================================
+
+def set_schedule_status(
+    group_id,
+    enabled
+):
+    """
+    Вмикає або вимикає групу таймера.
+    """
+
+    if not group_id:
+        return False
+
+    uri = (
+        f"/v1.0/devices/"
+        f"{BREAKER_ID}/timers/"
+        f"categories/{TIMER_CATEGORY}/"
+        f"groups/{group_id}/status"
+    )
+
+    body = {
+        "status": bool(
+            enabled
+        )
+    }
+
+    response = tuya_put(
+        uri,
+        body
+    )
+
+    if not isinstance(
+        response,
+        dict
+    ):
+        return False
+
+    return bool(
+        response.get(
+            "success",
+            False
+        )
+    )
+
+
+# ============================================================
+# ОТРИМУЄМО СТАН АВТОМАТА
+# ============================================================
+
+current_state = get_switch_state()
 
 
 # ============================================================
 # ЗАГОЛОВОК
 # ============================================================
 
-st.header(
+st.title(
+    "💧 Керування зрошенням"
+)
+
+st.subheader(
     "1 свердловина"
 )
 
-st.markdown("---")
-
 
 # ============================================================
-# ІНФОРМАЦІЯ ПРО ПРИСТРІЙ
+# ПОТОЧНИЙ СТАН
 # ============================================================
 
-st.subheader(
-    "🔌 Автоматичний вимикач"
+st.markdown(
+    "### ⚡ Автоматичний вимикач"
 )
 
 
-if device_data:
-
-    device_name = device_data.get(
-        "name",
-        "Без назви"
-    )
-
-    product_name = device_data.get(
-        "product_name",
-        "—"
-    )
-
-    category_name = device_data.get(
-        "category_name",
-        "—"
-    )
-
-    online = device_data.get(
-        "online",
-        False
-    )
-
-    col1, col2, col3, col4 = st.columns(
-        4
-    )
-
-    with col1:
-
-        st.metric(
-            "Назва",
-            device_name
-        )
-
-    with col2:
-
-        st.metric(
-            "Продукт",
-            product_name
-        )
-
-    with col3:
-
-        st.metric(
-            "Категорія",
-            category_name
-        )
-
-    with col4:
-
-        if online:
-
-            st.success(
-                "🟢 ONLINE"
-            )
-
-        else:
-
-            st.error(
-                "🔴 OFFLINE"
-            )
-
-else:
-
-    st.warning(
-        "Інформацію про пристрій не отримано."
-    )
-
-
-# ============================================================
-# ПОВНА ІНФОРМАЦІЯ ПРО ПРИСТРІЙ
-# ============================================================
-
-with st.expander(
-    "🔍 Повна інформація про пристрій"
-):
-
-    if device_data:
-
-        st.json(
-            device_data
-        )
-
-    else:
-
-        st.write(
-            "Дані відсутні."
-        )
-
-
-# ============================================================
-# ОТРИМАННЯ ФУНКЦІЙ ПРИСТРОЮ
-# ============================================================
-
-functions_uri = (
-    f"/v1.0/iot-03/devices/"
-    f"{BREAKER_ID}/functions"
-)
-
-functions_response = tuya_get(
-    functions_uri
+state_col, control_col = st.columns(
+    [1, 2]
 )
 
 
-functions_data = []
+with state_col:
 
+    st.markdown(
+        "#### Поточний стан"
+    )
 
-if isinstance(
-    functions_response,
-    dict
-):
+    if current_state is True:
 
-    if functions_response.get(
-        "success"
-    ):
-
-        result = functions_response.get(
-            "result",
-            {}
+        st.success(
+            "🟢 УВІМКНЕНО"
         )
 
-        functions_data = result.get(
-            "functions",
-            []
+    elif current_state is False:
+
+        st.error(
+            "🔴 ВИМКНЕНО"
         )
 
     else:
 
         st.warning(
-            "⚠️ Не вдалося отримати "
-            "функції пристрою."
+            "⚠️ Стан недоступний"
         )
 
 
-# ============================================================
-# ТЕХНІЧНІ ФУНКЦІЇ
-# ============================================================
+with control_col:
 
-with st.expander(
-    "⚙️ Доступні функції пристрою"
-):
+    st.markdown(
+        "#### Керування"
+    )
 
-    if functions_data:
-
-        for function in functions_data:
-
-            code = function.get(
-                "code",
-                ""
-            )
-
-            name = function.get(
-                "name",
-                ""
-            )
-
-            function_type = function.get(
-                "type",
-                ""
-            )
-
-            description = function.get(
-                "desc",
-                ""
-            )
-
-            st.write(
-                f"**{code}** — "
-                f"{name} "
-                f"({function_type})"
-            )
-
-            if description:
-
-                st.caption(
-                    description
-                )
-
-            st.divider()
-
-    else:
-
-        st.warning(
-            "Функції пристрою не отримані."
-        )
+    on_col, off_col = st.columns(
+        2
+    )
 
 
-# ============================================================
-# ВАЖЛИВО:
-# ОСНОВНИЙ КОД КЕРУВАННЯ — "switch"
-# ============================================================
+    with on_col:
 
-SWITCH_CODE = "switch"
-
-
-# Перевіряємо, чи справді switch існує
-switch_function_exists = False
-
-
-for function in functions_data:
-
-    code = str(
-        function.get(
-            "code",
-            ""
-        )
-    ).strip()
-
-    function_type = str(
-        function.get(
-            "type",
-            ""
-        )
-    ).lower()
-
-    if (
-        code == SWITCH_CODE
-        and function_type == "boolean"
-    ):
-
-        switch_function_exists = True
-        break
-
-
-# ============================================================
-# ОТРИМАННЯ ПОТОЧНОГО СТАТУСУ
-# ============================================================
-
-status_uri = (
-    f"/v1.0/iot-03/devices/"
-    f"{BREAKER_ID}/status"
-)
-
-status_response = tuya_get(
-    status_uri
-)
-
-
-statuses = []
-
-
-if isinstance(
-    status_response,
-    dict
-):
-
-    if status_response.get(
-        "success"
-    ):
-
-        statuses = status_response.get(
-            "result",
-            []
-        )
-
-    else:
-
-        st.warning(
-            "⚠️ Не вдалося отримати "
-            "поточний статус пристрою."
-        )
-
-
-# ============================================================
-# ПОТОЧНИЙ СТАН SWITCH
-# ============================================================
-
-current_power_state = None
-
-
-for item in statuses:
-
-    code = str(
-        item.get(
-            "code",
-            ""
-        )
-    ).strip()
-
-    if code == SWITCH_CODE:
-
-        value = item.get(
-            "value"
-        )
-
-        if isinstance(
-            value,
-            bool
+        if st.button(
+            "🟢 УВІМКНУТИ",
+            use_container_width=True,
+            type="primary",
+            key="main_switch_on"
         ):
 
-            current_power_state = value
-
-        break
-
-
-# ============================================================
-# ТЕХНІЧНИЙ СТАТУС
-# ============================================================
-
-with st.expander(
-    "📡 Повний статус пристрою"
-):
-
-    if statuses:
-
-        st.json(
-            statuses
-        )
-
-    else:
-
-        st.warning(
-            "Статус пристрою не отриманий."
-        )
-
-
-# ============================================================
-# ОСНОВНИЙ БЛОК КЕРУВАННЯ
-# ============================================================
-
-st.markdown("---")
-
-st.subheader(
-    "⚡ Керування автоматичним вимикачем"
-)
-
-
-if not switch_function_exists:
-
-    st.error(
-        """
-        ❌ У пристрою не знайдено функцію
-        `switch` типу Boolean.
-
-        Керування заблоковано, щоб випадково
-        не відправити команду іншому DP-коду.
-        """
-    )
-
-else:
-
-    st.caption(
-        "Основний DP-код керування: `switch`"
-    )
-
-    col_state, col_control = st.columns(
-        [1, 2]
-    )
-
-
-    # ========================================================
-    # ПОТОЧНИЙ СТАН
-    # ========================================================
-
-    with col_state:
-
-        st.markdown(
-            "##### Поточний стан"
-        )
-
-        if current_power_state is True:
-
-            st.success(
-                "🟢 УВІМКНЕНО"
+            success = set_switch_state(
+                True
             )
 
-        elif current_power_state is False:
+            if success:
 
-            st.error(
-                "🔴 ВИМКНЕНО"
-            )
-
-        else:
-
-            st.warning(
-                "⚠️ Стан невідомий"
-            )
-
-
-    # ========================================================
-    # КНОПКИ
-    # ========================================================
-
-    with col_control:
-
-        st.markdown(
-            "##### Керування з хмари"
-        )
-
-        col_on, col_off = st.columns(
-            2
-        )
-
-
-        # ====================================================
-        # УВІМКНЕННЯ
-        # ====================================================
-
-        with col_on:
-
-            if st.button(
-                "🟢 УВІМКНУТИ",
-                use_container_width=True,
-                type="primary",
-                key="breaker_switch_on"
-            ):
-
-                command_uri = (
-                    f"/v1.0/iot-03/devices/"
-                    f"{BREAKER_ID}/commands"
+                st.success(
+                    "Автомат увімкнено."
                 )
 
-                command_body = {
-                    "commands": [
-                        {
-                            "code": SWITCH_CODE,
-                            "value": True
-                        }
-                    ]
-                }
-
-                response = tuya_post(
-                    command_uri,
-                    command_body
+                time.sleep(
+                    0.5
                 )
 
-                if response is None:
+                st.rerun()
 
-                    st.error(
-                        "❌ Від Tuya не отримано відповіді."
-                    )
+            else:
 
-                elif response.get(
-                    "success"
-                ):
-
-                    st.success(
-                        "✅ Команду УВІМКНЕННЯ "
-                        "прийнято Tuya."
-                    )
-
-                    # Даємо пристрою час оновити статус
-                    time.sleep(1)
-
-                    # Оновлюємо сторінку
-                    st.rerun()
-
-                else:
-
-                    st.error(
-                        "❌ Tuya не прийняла "
-                        "команду УВІМКНЕННЯ."
-                    )
-
-                    st.json(
-                        response
-                    )
-
-
-        # ====================================================
-        # ВИМКНЕННЯ
-        # ====================================================
-
-        with col_off:
-
-            if st.button(
-                "🔴 ВИМКНУТИ",
-                use_container_width=True,
-                key="breaker_switch_off"
-            ):
-
-                command_uri = (
-                    f"/v1.0/iot-03/devices/"
-                    f"{BREAKER_ID}/commands"
+                st.error(
+                    "Не вдалося увімкнути автомат."
                 )
 
-                command_body = {
-                    "commands": [
-                        {
-                            "code": SWITCH_CODE,
-                            "value": False
-                        }
-                    ]
-                }
 
-                response = tuya_post(
-                    command_uri,
-                    command_body
-                )
+    with off_col:
 
-                if response is None:
+        if st.button(
+            "🔴 ВИМКНУТИ",
+            use_container_width=True,
+            key="main_switch_off"
+        ):
 
-                    st.error(
-                        "❌ Від Tuya не отримано відповіді."
-                    )
-
-                elif response.get(
-                    "success"
-                ):
-
-                    st.success(
-                        "✅ Команду ВИМКНЕННЯ "
-                        "прийнято Tuya."
-                    )
-
-                    time.sleep(1)
-
-                    st.rerun()
-
-                else:
-
-                    st.error(
-                        "❌ Tuya не прийняла "
-                        "команду ВИМКНЕННЯ."
-                    )
-
-                    st.json(
-                        response
-                    )
-
-
-# ============================================================
-# ДЕТАЛЬНА ІНФОРМАЦІЯ ПРО СТАН
-# ============================================================
-
-st.markdown("---")
-
-st.subheader(
-    "📊 Показники автоматичного вимикача"
-)
-
-
-# Створюємо словник статусів
-status_dict = {}
-
-for item in statuses:
-
-    code = item.get(
-        "code"
-    )
-
-    value = item.get(
-        "value"
-    )
-
-    if code:
-
-        status_dict[code] = value
-
-
-# ============================================================
-# ОСНОВНІ ПОКАЗНИКИ
-# ============================================================
-
-energy = status_dict.get(
-    "total_forward_energy"
-)
-
-balance_energy = status_dict.get(
-    "balance_energy"
-)
-
-fault = status_dict.get(
-    "fault"
-)
-
-breaker_number = status_dict.get(
-    "breaker_number"
-)
-
-
-metric1, metric2, metric3, metric4 = st.columns(
-    4
-)
-
-
-with metric1:
-
-    if energy is not None:
-
-        st.metric(
-            "Загальна енергія",
-            str(energy)
-        )
-
-    else:
-
-        st.metric(
-            "Загальна енергія",
-            "—"
-        )
-
-
-with metric2:
-
-    if balance_energy is not None:
-
-        st.metric(
-            "Баланс енергії",
-            str(balance_energy)
-        )
-
-    else:
-
-        st.metric(
-            "Баланс енергії",
-            "—"
-        )
-
-
-with metric3:
-
-    if fault is not None:
-
-        if fault == 0:
-
-            st.metric(
-                "Помилка",
-                "Немає"
+            success = set_switch_state(
+                False
             )
 
-        else:
+            if success:
 
-            st.metric(
-                "Помилка",
-                str(fault)
-            )
+                st.success(
+                    "Автомат вимкнено."
+                )
 
-    else:
+                time.sleep(
+                    0.5
+                )
 
-        st.metric(
-            "Помилка",
-            "—"
-        )
+                st.rerun()
 
+            else:
 
-with metric4:
-
-    if breaker_number:
-
-        st.metric(
-            "Номер автомата",
-            str(breaker_number)
-        )
-
-    else:
-
-        st.metric(
-            "Номер автомата",
-            "—"
-        )
-
-
-# ============================================================
-# СТАН ФАЗ
-# ============================================================
-
-st.markdown("---")
-
-st.subheader(
-    "📡 Статус фаз"
-)
-
-
-phase_a = status_dict.get(
-    "phase_a"
-)
-
-phase_b = status_dict.get(
-    "phase_b"
-)
-
-phase_c = status_dict.get(
-    "phase_c"
-)
-
-
-phase1, phase2, phase3 = st.columns(
-    3
-)
-
-
-with phase1:
-
-    st.markdown(
-        "**Фаза A**"
-    )
-
-    if phase_a is not None:
-
-        st.code(
-            str(phase_a)
-        )
-
-    else:
-
-        st.write(
-            "Дані відсутні"
-        )
-
-
-with phase2:
-
-    st.markdown(
-        "**Фаза B**"
-    )
-
-    if phase_b is not None:
-
-        st.code(
-            str(phase_b)
-        )
-
-    else:
-
-        st.write(
-            "Дані відсутні"
-        )
-
-
-with phase3:
-
-    st.markdown(
-        "**Фаза C**"
-    )
-
-    if phase_c is not None:
-
-        st.code(
-            str(phase_c)
-        )
-
-    else:
-
-        st.write(
-            "Дані відсутні"
-        )
+                st.error(
+                    "Не вдалося вимкнути автомат."
+                )
 
 
 # ============================================================
@@ -1121,112 +871,515 @@ with phase3:
 st.markdown("---")
 
 st.subheader(
-    "⏰ Налаштування розкладу"
+    "⏰ Розклад роботи"
+)
+
+st.caption(
+    f"Можна створити до {MAX_SCHEDULES} завдань."
 )
 
 
-with st.form(
-    key="breaker_schedule_form"
-):
+# ============================================================
+# ЗАВАНТАЖУЄМО ІСНУЮЧІ ЗАВДАННЯ
+# ============================================================
 
-    b_col1, b_col2 = st.columns(
-        2
-    )
+schedules = get_schedules()
 
 
-    # ========================================================
-    # ЧАС УВІМКНЕННЯ
-    # ========================================================
-
-    with b_col1:
-
-        b_on_time = st.time_input(
-            "Час увімкнення",
-            datetime.time(
-                8,
-                0
-            ),
-            key="b_on"
-        )
-
-
-    # ========================================================
-    # ЧАС ВИМКНЕННЯ
-    # ========================================================
-
-    with b_col2:
-
-        b_off_time = st.time_input(
-            "Час вимкнення",
-            datetime.time(
-                18,
-                0
-            ),
-            key="b_off"
-        )
-
-
-    # ========================================================
-    # ДНІ
-    # ========================================================
-
-    b_days = st.multiselect(
-        "Дні тижня",
-        [
-            "Понеділок",
-            "Вівторок",
-            "Середа",
-            "Четвер",
-            "П'ятниця",
-            "Субота",
-            "Неділя"
-        ],
-        default=[
-            "Понеділок",
-            "Середа",
-            "П'ятниця"
-        ],
-        key="b_days"
-    )
-
-
-    # ========================================================
-    # ЗБЕРЕЖЕННЯ
-    # ========================================================
-
-    if st.form_submit_button(
-        "Зберегти розклад вимикача"
-    ):
-
-        st.success(
-            f"Розклад збережено: "
-            f"з {b_on_time.strftime('%H:%M')} "
-            f"по {b_off_time.strftime('%H:%M')}"
-        )
-
-        if b_days:
-
-            st.info(
-                "Дні: "
-                + ", ".join(
-                    b_days
-                )
-            )
-
-        else:
-
-            st.warning(
-                "Дні тижня не вибрані."
-            )
+# Обмежуємо кількість показаних завдань
+schedules = schedules[
+    :MAX_SCHEDULES
+]
 
 
 # ============================================================
-# СИСТЕМНА ІНФОРМАЦІЯ
+# КІЛЬКІСТЬ
+# ============================================================
+
+st.write(
+    f"Створено завдань: "
+    f"**{len(schedules)} / {MAX_SCHEDULES}**"
+)
+
+
+# ============================================================
+# ДОДАВАННЯ НОВОГО ЗАВДАННЯ
+# ============================================================
+
+if len(schedules) < MAX_SCHEDULES:
+
+    with st.expander(
+        "➕ Додати завдання",
+        expanded=True
+    ):
+
+        with st.form(
+            key="add_schedule_form",
+            clear_on_submit=True
+        ):
+
+            name = st.text_input(
+                "Назва завдання",
+                placeholder=(
+                    "Наприклад: Ранковий полив"
+                )
+            )
+
+            col1, col2 = st.columns(
+                2
+            )
+
+            with col1:
+
+                schedule_time = st.time_input(
+                    "Час виконання",
+                    value=datetime.time(
+                        8,
+                        0
+                    )
+                )
+
+            with col2:
+
+                switch_state = st.selectbox(
+                    "Дія",
+                    [
+                        True,
+                        False
+                    ],
+                    format_func=lambda x:
+                        "🟢 Увімкнути"
+                        if x
+                        else
+                        "🔴 Вимкнути"
+                )
+
+            selected_days = st.multiselect(
+                "Дні виконання",
+                WEEKDAYS,
+                help=(
+                    "Якщо не вибрати жодного дня, "
+                    "завдання буде одноразовим."
+                )
+            )
+
+            submitted = st.form_submit_button(
+                "💾 Додати завдання",
+                use_container_width=True,
+                type="primary"
+            )
+
+
+            if submitted:
+
+                if not name.strip():
+
+                    st.error(
+                        "Введіть назву завдання."
+                    )
+
+                elif selected_days:
+
+                    response = add_schedule(
+                        name.strip(),
+                        schedule_time,
+                        selected_days,
+                        switch_state
+                    )
+
+                    if (
+                        isinstance(
+                            response,
+                            dict
+                        )
+                        and response.get(
+                            "success"
+                        )
+                    ):
+
+                        st.success(
+                            "✅ Завдання успішно "
+                            "додано до Tuya Cloud."
+                        )
+
+                        time.sleep(
+                            0.5
+                        )
+
+                        st.rerun()
+
+                    else:
+
+                        st.error(
+                            "❌ Tuya не змогла "
+                            "створити завдання."
+                        )
+
+                        if response:
+
+                            st.json(
+                                response
+                            )
+
+                else:
+
+                    response = add_schedule(
+                        name.strip(),
+                        schedule_time,
+                        selected_days,
+                        switch_state
+                    )
+
+                    if (
+                        isinstance(
+                            response,
+                            dict
+                        )
+                        and response.get(
+                            "success"
+                        )
+                    ):
+
+                        st.success(
+                            "✅ Одноразове завдання "
+                            "успішно додано."
+                        )
+
+                        time.sleep(
+                            0.5
+                        )
+
+                        st.rerun()
+
+                    else:
+
+                        st.error(
+                            "❌ Tuya не змогла "
+                            "створити завдання."
+                        )
+
+                        if response:
+
+                            st.json(
+                                response
+                            )
+
+else:
+
+    st.warning(
+        "Досягнуто максимальну кількість "
+        f"завдань: {MAX_SCHEDULES}."
+    )
+
+
+# ============================================================
+# СПИСОК ЗАВДАНЬ
 # ============================================================
 
 st.markdown("---")
 
-st.caption(
-    "Tuya Cloud • Circuit Breaker • "
-    "Свердловина 1 • Іригація"
+st.subheader(
+    "📋 Заплановані завдання"
 )
+
+
+if not schedules:
+
+    st.info(
+        "Завдань поки немає."
+    )
+
+else:
+
+    for index, schedule in enumerate(
+        schedules,
+        start=1
+    ):
+
+        # ----------------------------------------------------
+        # ID
+        # ----------------------------------------------------
+
+        group_id = schedule.get(
+            "group_id"
+        )
+
+        timer_id = schedule.get(
+            "id"
+        )
+
+        # ----------------------------------------------------
+        # НАЗВА
+        # ----------------------------------------------------
+
+        name = schedule.get(
+            "alias_name",
+            ""
+        )
+
+        if not name:
+
+            name = schedule.get(
+                "group_alias",
+                ""
+            )
+
+        if not name:
+
+            name = (
+                f"Завдання {index}"
+            )
+
+        # ----------------------------------------------------
+        # ЧАС
+        # ----------------------------------------------------
+
+        task_time = schedule.get(
+            "time",
+            "—"
+        )
+
+        # ----------------------------------------------------
+        # ДНІ
+        # ----------------------------------------------------
+
+        loops = schedule.get(
+            "loops",
+            "0000000"
+        )
+
+        days_text = format_days(
+            loops
+        )
+
+        # ----------------------------------------------------
+        # СТАН
+        # ----------------------------------------------------
+
+        status = schedule.get(
+            "status",
+            1
+        )
+
+        enabled = (
+            status == 1
+            or status is True
+        )
+
+        # ----------------------------------------------------
+        # ДІЯ
+        # ----------------------------------------------------
+
+        action_text = "—"
+
+        # У старому API інформація про
+        # функції може бути у timer/group.
+        functions = schedule.get(
+            "functions",
+            []
+        )
+
+        if functions:
+
+            for function in functions:
+
+                if function.get(
+                    "code"
+                ) == SWITCH_CODE:
+
+                    value = function.get(
+                        "value"
+                    )
+
+                    if value is True:
+
+                        action_text = (
+                            "🟢 Увімкнути"
+                        )
+
+                    elif value is False:
+
+                        action_text = (
+                            "🔴 Вимкнути"
+                        )
+
+        # ----------------------------------------------------
+        # ВІДОБРАЖЕННЯ
+        # ----------------------------------------------------
+
+        with st.container(
+            border=True
+        ):
+
+            top1, top2, top3, top4 = st.columns(
+                [0.6, 2.2, 1.3, 1.5]
+            )
+
+            with top1:
+
+                st.markdown(
+                    f"### {index}"
+                )
+
+            with top2:
+
+                st.markdown(
+                    f"**{name}**"
+                )
+
+                st.caption(
+                    days_text
+                )
+
+            with top3:
+
+                st.markdown(
+                    f"### {task_time}"
+                )
+
+                st.caption(
+                    action_text
+                )
+
+            with top4:
+
+                if enabled:
+
+                    st.success(
+                        "🟢 Активне"
+                    )
+
+                else:
+
+                    st.warning(
+                        "⏸️ Вимкнене"
+                    )
+
+
+            action1, action2 = st.columns(
+                2
+            )
+
+
+            # ------------------------------------------------
+            # УВІМКНЕННЯ / ВИМКНЕННЯ ЗАВДАННЯ
+            # ------------------------------------------------
+
+            with action1:
+
+                if enabled:
+
+                    if st.button(
+                        "⏸️ Вимкнути завдання",
+                        key=(
+                            f"disable_{group_id}_"
+                            f"{timer_id}"
+                        ),
+                        use_container_width=True
+                    ):
+
+                        if set_schedule_status(
+                            group_id,
+                            False
+                        ):
+
+                            st.success(
+                                "Завдання вимкнено."
+                            )
+
+                            time.sleep(
+                                0.4
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            st.error(
+                                "Не вдалося "
+                                "вимкнути завдання."
+                            )
+
+                else:
+
+                    if st.button(
+                        "▶️ Увімкнути завдання",
+                        key=(
+                            f"enable_{group_id}_"
+                            f"{timer_id}"
+                        ),
+                        use_container_width=True
+                    ):
+
+                        if set_schedule_status(
+                            group_id,
+                            True
+                        ):
+
+                            st.success(
+                                "Завдання увімкнено."
+                            )
+
+                            time.sleep(
+                                0.4
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            st.error(
+                                "Не вдалося "
+                                "увімкнути завдання."
+                            )
+
+
+            # ------------------------------------------------
+            # ВИДАЛЕННЯ
+            # ------------------------------------------------
+
+            with action2:
+
+                if st.button(
+                    "🗑️ Видалити",
+                    key=(
+                        f"delete_{group_id}_"
+                        f"{timer_id}"
+                    ),
+                    use_container_width=True
+                ):
+
+                    if delete_schedule(
+                        group_id
+                    ):
+
+                        st.success(
+                            "Завдання видалено."
+                        )
+
+                        time.sleep(
+                            0.4
+                        )
+
+                        st.rerun()
+
+                    else:
+
+                        st.error(
+                            "Не вдалося "
+                            "видалити завдання."
+                        )
+
+
+# ============================================================
+# ОНОВЛЕННЯ
+# ============================================================
+
+st.markdown("---")
+
+if st.button(
+    "🔄 Оновити стан і розклад",
+    use_container_width=True
+):
+
+    st.rerun()
