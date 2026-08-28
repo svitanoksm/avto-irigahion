@@ -1849,7 +1849,7 @@ elif menu_option == "Полив кожної рослини":
         c = str(raw_culture).strip().lower()
 
         if "горіх" in c:
-            return "Горіх", [
+            return "Горіх волоський", [
                 "walnut.jpg",
                 "Волоський горіх .jpg",
                 "Волоський горіх.jpg",
@@ -1877,7 +1877,9 @@ elif menu_option == "Полив кожної рослини":
     with col_img:
 
         st.markdown(
-            f"### 🌿 {display_culture}"
+            f"<p style='font-size:34px; font-weight:700; margin-bottom:0.3em;'>"
+            f"🌿 {display_culture}</p>",
+            unsafe_allow_html=True,
         )
 
         img = None
@@ -1894,10 +1896,6 @@ elif menu_option == "Полив кожної рослини":
             st.image(
                 img,
                 use_container_width=True,
-                caption=(
-                    f"Модуль: {selected_module} "
-                    f"({trees_count} дерев)"
-                ),
             )
 
         else:
