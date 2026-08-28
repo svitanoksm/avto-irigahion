@@ -26,7 +26,9 @@ menu_option = st.sidebar.radio(
 
 SPREADSHEET_NAME = "Автоматизація зрошення"
 WORKSHEET_NAME = "Свердловина 1"
-PARAMETERS_WORKSHEET_NAME = "Параметри"
+
+PARAMETERS_SPREADSHEET_NAME = "11. Hazelnut Сад"
+PARAMETERS_WORKSHEET_NAME = "Довідник зрошувальних модулів"
 
 
 # ============================================================
@@ -285,7 +287,7 @@ try:
     )
 
     df_params = load_parameters(
-        SPREADSHEET_NAME,
+        PARAMETERS_SPREADSHEET_NAME,
         PARAMETERS_WORKSHEET_NAME,
     )
 
@@ -1354,9 +1356,9 @@ elif menu_option == "Полив кожної рослини":
     trees_count = 0
     culture_name = "Фундук"
 
-    val_jifoni = 0.0
-    val_mortarela = 0.0
-    val_romano = 0.0
+    val_sort = 0.0
+    val_poll1 = 0.0
+    val_poll2 = 0.0
 
     if not df_params.empty:
         df_params.columns = [str(c).strip() for c in df_params.columns]
@@ -1371,35 +1373,47 @@ elif menu_option == "Полив кожної рослини":
             if not matched_rows.empty:
                 row_data = matched_rows.iloc[0]
 
-                col_jifoni = next((c for c in df_params.columns if "джифоні" in c.lower()), None)
-                col_mortarela = next((c for c in df_params.columns if "мортарела" in c.lower()), None)
-                col_romano = next((c for c in df_params.columns if "романо" in c.lower()), None)
+                col_sort = next(
+                    (c for c in df_params.columns
+                     if "кількість" in c.lower() and "сорту" in c.lower()),
+                    None,
+                )
+                col_poll1 = next(
+                    (c for c in df_params.columns
+                     if "кількість" in c.lower() and "запилювача" in c.lower() and "1" in c),
+                    None,
+                )
+                col_poll2 = next(
+                    (c for c in df_params.columns
+                     if "кількість" in c.lower() and "запилювача" in c.lower() and "2" in c),
+                    None,
+                )
                 col_culture = next((c for c in df_params.columns if "культура" in c.lower()), None)
 
-                if col_jifoni:
-                    raw_val = row_data[col_jifoni]
+                if col_sort:
+                    raw_val = row_data[col_sort]
                     if hasattr(raw_val, "iloc"):
                         raw_val = raw_val.iloc[0]
-                    val_jifoni = convert_to_number(raw_val) or 0.0
+                    val_sort = convert_to_number(raw_val) or 0.0
 
-                if col_mortarela:
-                    raw_val = row_data[col_mortarela]
+                if col_poll1:
+                    raw_val = row_data[col_poll1]
                     if hasattr(raw_val, "iloc"):
                         raw_val = raw_val.iloc[0]
-                    val_mortarela = convert_to_number(raw_val) or 0.0
+                    val_poll1 = convert_to_number(raw_val) or 0.0
 
-                if col_romano:
-                    raw_val = row_data[col_romano]
+                if col_poll2:
+                    raw_val = row_data[col_poll2]
                     if hasattr(raw_val, "iloc"):
                         raw_val = raw_val.iloc[0]
-                    val_romano = convert_to_number(raw_val) or 0.0
+                    val_poll2 = convert_to_number(raw_val) or 0.0
 
                 if col_culture:
                     c_val = str(row_data[col_culture]).strip()
                     if c_val and c_val.lower() not in ["nan", "none", ""]:
                         culture_name = c_val
 
-                total_calc_trees = val_jifoni + val_mortarela + val_romano
+                total_calc_trees = val_sort + val_poll1 + val_poll2
                 trees_count = int(round(total_calc_trees)) if total_calc_trees > 0 else 0
 
     # ========================================================
@@ -1412,10 +1426,10 @@ elif menu_option == "Полив кожної рослини":
             "Не вдалося визначити кількість дерев "
             f"для модуля «{selected_module}». "
             "Перевірте стовпці "
-            "«Кількість Джифоні, шт», "
-            "«Кількість запилювача Мортарела, шт» "
-            "та «Кількість запилювача Романо, шт» "
-            "у таблиці «Параметри»."
+            "«Кількість дерев сорту, шт», "
+            "«Кількість дерев запилювача 1, шт» "
+            "та «Кількість дерев запилювача 2, шт» "
+            "у таблиці «Довідник зрошувальних модулів»."
         )
 
         st.stop()
@@ -1427,9 +1441,9 @@ elif menu_option == "Полив кожної рослини":
     st.caption(
         f"🌳 Кількість дерев у модулі: "
         f"**{trees_count} шт.** "
-        f"({int(val_jifoni)} Джифоні + "
-        f"{int(val_mortarela)} Мортарела + "
-        f"{int(val_romano)} Романо)"
+        f"({int(val_sort)} сорту + "
+        f"{int(val_poll1)} запилювача 1 + "
+        f"{int(val_poll2)} запилювача 2)"
     )
 
     # ========================================================
