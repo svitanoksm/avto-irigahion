@@ -1877,7 +1877,7 @@ elif menu_option == "Полив кожної рослини":
     with col_img:
 
         st.markdown(
-            f"<p style='font-size:34px; font-weight:700; margin-bottom:0.3em;'>"
+            f"<p style='font-size:50px; font-weight:700; margin-bottom:0.3em;'>"
             f"🌿 {display_culture}</p>",
             unsafe_allow_html=True,
         )
