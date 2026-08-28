@@ -20,22 +20,21 @@ st.markdown("""
 # --- ФУНКЦІЇ ПІДКЛЮЧЕННЯ ДО TUYA API ---
 
 def get_tuya_token():
-    """Отримання чинного токена доступу до Tuya Cloud API (HMAC-SHA256)"""
+    """Отримання токена Tuya Cloud"""
     try:
-        tuya_conf = st.secrets["tuya"]
-        client_id = tuya_conf["access_id"]
-        client_secret = tuya_conf["access_key"]
-        base_url = tuya_conf["endpoint"]
+        conf = st.secrets["tuya"]
+        client_id = conf["access_id"]
+        secret = conf["access_key"]
+        base_url = conf["endpoint"]
     except Exception:
         st.error("Не знайдено параметри [tuya] у файлі st.secrets!")
         return None, None, None
 
     t = str(int(time.time() * 1000))
-    
-    # Підпис для отримання токена: client_id + t
+    # Для токена рядок підпису: client_id + t
     message = client_id + t
     sign = hmac.new(
-        client_secret.encode('utf-8'),
+        secret.encode('utf-8'),
         message.encode('utf-8'),
         hashlib.sha256
     ).hexdigest().upper()
@@ -49,19 +48,15 @@ def get_tuya_token():
 
     try:
         response = requests.get(base_url + "/v1.0/token?grant_type=1", headers=headers)
-        res_data = response.json()
-        if res_data.get("success"):
-            access_token = res_data["result"]["access_token"]
-            return base_url, access_token, client_id
-        else:
-            st.error(f"Помилка авторизації Tuya: {res_data.get('msg')}")
-            return None, None, None
-    except Exception as e:
-        st.error(f"Помилка запиту до Tuya API: {e}")
-        return None, None, None
+        res = response.json()
+        if res.get("success"):
+            return base_url, res["result"]["access_token"], client_id
+    except Exception:
+        pass
+    return None, None, None
 
 def get_device_status(device_id):
-    """Отримання статусу пристрою з Tuya Cloud за правильним стандартом GET-запитів"""
+    """Отримання статусу пристрою (з правильним розрахунком sign для Tuya)"""
     base_url, token, client_id = get_tuya_token()
     if not token:
         return []
@@ -69,12 +64,12 @@ def get_device_status(device_id):
     t = str(int(time.time() * 1000))
     secret = st.secrets["tuya"]["access_key"]
     
-    # Для GET запитів з токеном рядок підпису Tuya: client_id + token + t + GET + \n + content_sha256 + \n + headers + \n + url
-    # Спрощений стандартний підпис для GET статусів:
+    # Специфікація Tuya OpenAPI для GET: client_id + access_token + t + HTTPMethod + content_sha256 + sign_headers + url
+    # Для простого GET без body content_sha256 це хеш від пустої строки
     empty_hash = hashlib.sha256(b"").hexdigest()
     uri = f"/v1.0/iot-03/devices/{device_id}/status"
+    
     string_to_sign = client_id + token + t + "GET\n" + empty_hash + "\n\n" + uri
-
     sign = hmac.new(
         secret.encode('utf-8'),
         string_to_sign.encode('utf-8'),
@@ -91,15 +86,15 @@ def get_device_status(device_id):
 
     try:
         response = requests.get(base_url + uri, headers=headers)
-        res_data = response.json()
-        if res_data.get("success"):
-            return res_data.get("result", [])
+        res = response.json()
+        if res.get("success"):
+            return res.get("result", [])
     except Exception:
         pass
     return []
 
 def send_tuya_command(device_id, code, value):
-    """Надсилання команди на пристрій через Tuya Cloud API"""
+    """Надсилання команди на пристрій"""
     base_url, token, client_id = get_tuya_token()
     if not token:
         return False
@@ -112,8 +107,8 @@ def send_tuya_command(device_id, code, value):
     
     content_sha256 = hashlib.sha256(body_str.encode('utf-8')).hexdigest()
     uri = f"/v1.0/iot-03/devices/{device_id}/commands"
-    string_to_sign = client_id + token + t + "POST\n" + content_sha256 + "\n\n" + uri
     
+    string_to_sign = client_id + token + t + "POST\n" + content_sha256 + "\n\n" + uri
     sign = hmac.new(
         secret.encode('utf-8'),
         string_to_sign.encode('utf-8'),
@@ -131,10 +126,9 @@ def send_tuya_command(device_id, code, value):
 
     try:
         response = requests.post(base_url + uri, headers=headers, data=body_str)
-        res_data = response.json()
-        return res_data.get("success", False)
-    except Exception as e:
-        st.error(f"Помилка надсилання команди: {e}")
+        res = response.json()
+        return res.get("success", False)
+    except Exception:
         return False
 
 # --- ІНТЕРФЕЙС КОРИСТУВАЧА ---
@@ -157,7 +151,6 @@ for item in statuses:
         current_power_state = bool(item["value"])
         break
 
-# --- 1. Автоматичний вимикач ---
 st.subheader("⚡ Автоматичний вимикач (1 свердловина Автоматичний вимикач)")
 
 col_state, col_sched = st.columns([1, 2])
@@ -202,8 +195,7 @@ with col_sched:
             key="b_days"
         )
         
-        b_submitted = st.form_submit_button("Зберегти розклад вимикача")
-        if b_submitted:
-            st.success(f"Розклад для Автоматичного вимикача збережено: з {b_on_time} по {b_off_time}")
+        if st.form_submit_button("Зберегти розклад вимикача"):
+            st.success(f"Розклад збережено: з {b_on_time} по {b_off_time}")
 
 st.markdown("---")
