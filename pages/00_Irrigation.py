@@ -1360,6 +1360,12 @@ elif menu_option == "Полив кожної рослини":
     val_poll1 = 0.0
     val_poll2 = 0.0
 
+    mod_param_col = None
+    matched_rows = pd.DataFrame()
+    col_sort = None
+    col_poll1 = None
+    col_poll2 = None
+
     if not df_params.empty:
         df_params.columns = [str(c).strip() for c in df_params.columns]
 
@@ -1431,6 +1437,65 @@ elif menu_option == "Полив кожної рослини":
             "та «Кількість дерев запилювача 2, шт» "
             "у таблиці «Довідник зрошувальних модулів»."
         )
+
+        with st.expander("🔍 Діагностика (натисніть, щоб побачити деталі)"):
+
+            st.write(
+                "**Таблиця параметрів порожня (df_params.empty):**",
+                df_params.empty,
+            )
+
+            if not df_params.empty:
+                st.write(
+                    "**Знайдені стовпці в аркуші «Довідник зрошувальних модулів»:**"
+                )
+                st.write(list(df_params.columns))
+
+                st.write(
+                    "**Стовпець, визначений як 'модуль' (mod_param_col):**",
+                    mod_param_col,
+                )
+
+                if mod_param_col:
+                    st.write(
+                        "**Унікальні значення у цьому стовпці:**"
+                    )
+                    st.write(
+                        df_params[mod_param_col].astype(str).str.strip().unique().tolist()
+                    )
+                    st.write(
+                        "**Значення, яке шукаємо (обраний модуль):**",
+                        repr(str(selected_module).strip()),
+                    )
+                    st.write(
+                        "**Знайдено рядків, що співпадають:**",
+                        len(matched_rows),
+                    )
+
+                st.write(
+                    "**Стовпець 'Кількість дерев сорту, шт' знайдено як:**",
+                    col_sort,
+                )
+                st.write(
+                    "**Стовпець 'Кількість дерев запилювача 1, шт' знайдено як:**",
+                    col_poll1,
+                )
+                st.write(
+                    "**Стовпець 'Кількість дерев запилювача 2, шт' знайдено як:**",
+                    col_poll2,
+                )
+                st.write(
+                    "**Сирі значення з таблиці (до перетворення в число):**",
+                    f"сорт = {val_sort!r}, запилювач 1 = {val_poll1!r}, запилювач 2 = {val_poll2!r}",
+                )
+            else:
+                st.write(
+                    "Це означає, що не вдалося прочитати аркуш "
+                    f"«{PARAMETERS_WORKSHEET_NAME}» у таблиці «{PARAMETERS_SPREADSHEET_NAME}». "
+                    "Найімовірніші причини: сервісний обліковий запис не має доступу "
+                    "до цієї таблиці, або назва таблиці/аркуша вказана неточно "
+                    "(перевірте регістр та пробіли)."
+                )
 
         st.stop()
 
