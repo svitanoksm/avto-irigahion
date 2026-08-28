@@ -4,6 +4,7 @@ import time
 import hmac
 import hashlib
 import requests
+import json
 
 st.set_page_config(
     page_title="Керування приладами та іригацією",
@@ -56,7 +57,7 @@ def get_tuya_token():
             st.error(f"Помилка авторизації Tuya: {res_data.get('msg')}")
             return None, None, None
     except Exception as e:
-        st.error(fльній помилка запиту до Tuya API: {e}")
+        st.error(f"Помилка запиту до Tuya API: {e}")
         return None, None, None
 
 def get_device_status(device_id):
@@ -97,9 +98,7 @@ def send_tuya_command(device_id, code, value):
         return False
 
     t = str(int(time.time() * 1000))
-    # Для POST запитів підпис формується з урахуванням body
     body = {"commands": [{"code": code, "value": value}]}
-    import json
     body_str = json.dumps(body)
     
     content_sha256 = hashlib.sha256(body_str.encode('utf-8')).hexdigest()
@@ -133,19 +132,16 @@ def send_tuya_command(device_id, code, value):
 st.header("1 свердловина")
 st.markdown("---")
 
-# Отримуємо реальний Device ID вимикача із секретів
 try:
     BREAKER_ID = st.secrets["tuya"]["breaker_device_id"]
 except Exception:
     BREAKER_ID = "bf14f332c4049e5d89xot0"
 
-# Отримуємо поточний стан пристрою з хмари
 statuses = get_device_status(BREAKER_ID)
 current_power_state = False
-switch_code = "switch_1"  # Стандартний код для реле/вимикачів Tuya
+switch_code = "switch_1"
 
 for item in statuses:
-    # Зазвичай для таких автоматів код стану починається зі switch або switch_1
     if "switch" in item.get("code", ""):
         switch_code = item["code"]
         current_power_state = bool(item["value"])
@@ -159,14 +155,12 @@ col_state, col_sched = st.columns([1, 2])
 with col_state:
     st.markdown("##### Керування з хмари")
     
-    # Інтерактивний тумблер, стан якого синхронізовано з хмарою Tuya
     new_breaker_state = st.toggle(
         "Стан живлення", 
         value=current_power_state, 
         key="breaker_tuya_toggle"
     )
     
-    # Якщо користувач змінив положення тумблера — відправляємо команду на хмару
     if new_breaker_state != current_power_state:
         with st.spinner("Надсилання команди на пристрій..."):
             success = send_tuya_command(BREAKER_ID, switch_code, new_breaker_state)
@@ -203,7 +197,3 @@ with col_sched:
             st.success(f"Розклад для Автоматичного вимикача збережено: з {b_on_time} по {b_off_time}")
 
 st.markdown("---")
-
-# --- 2. Реле свердловини (Чотири вимикачі) ---
-st.subheader("🔌 Реле свердловини (Модулі)")
-st.info("Наступним кроком підключимо чотири реле («Модуль 1-3», «Модуль 1-4», «Модуль 1-5», «Резерв»). Перевірте роботоздатність автоматичного вимикача вище.")
