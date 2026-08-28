@@ -30,7 +30,7 @@ pg = st.navigation([
     ),
 
     st.Page(
-        "pages/03_Tuya_Diagnostic.py",
+        "pages/tuya_diagnostic.py",
         title="Діагностика Tuya",
         icon="🔎",
     ),
