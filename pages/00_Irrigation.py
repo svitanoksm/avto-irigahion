@@ -1839,6 +1839,32 @@ elif menu_option == "Полив кожної рослини":
     # ЗОБРАЖЕННЯ + ПОКАЗНИКИ
     # ========================================================
 
+    # ========================================================
+    # ВИЗНАЧЕННЯ ЗОБРАЖЕННЯ ТА ПІДПИСУ ЗАЛЕЖНО ВІД КУЛЬТУРИ
+    # ========================================================
+
+    def resolve_culture_display(raw_culture):
+        """Повертає (назва_для_підпису, [список_можливих_файлів_зображення])."""
+
+        c = str(raw_culture).strip().lower()
+
+        if "горіх" in c:
+            return "Горіх", [
+                "walnut.jpg",
+                "Волоський горіх .jpg",
+                "Волоський горіх.jpg",
+                "Волоський горіх . jpg",
+                "волоський горіх.jpg",
+            ]
+
+        # За замовчуванням / фундук
+        return "Фундук", [
+            "image_693716.jpg",
+            "зображення_693716.jpg",
+        ]
+
+    display_culture, culture_image_candidates = resolve_culture_display(culture_name)
+
     col_img, col_metrics = st.columns(
         [1, 2],
         gap="large",
@@ -1851,14 +1877,19 @@ elif menu_option == "Полив кожної рослини":
     with col_img:
 
         st.markdown(
-            f"### 🌿 {culture_name}"
+            f"### 🌿 {display_culture}"
         )
 
-        try:
+        img = None
 
-            img = Image.open(
-                "image_693716.jpg"
-            )
+        for candidate_path in culture_image_candidates:
+            try:
+                img = Image.open(candidate_path)
+                break
+            except Exception:
+                continue
+
+        if img is not None:
 
             st.image(
                 img,
@@ -1869,12 +1900,12 @@ elif menu_option == "Полив кожної рослини":
                 ),
             )
 
-        except Exception:
+        else:
 
             st.warning(
-                "Не вдалося завантажити "
-                "зображення 'image_693716.jpg'. "
-                "Перевірте наявність файлу."
+                "Не вдалося завантажити зображення для культури "
+                f"«{display_culture}». Перевірте, що у репозиторії є файл: "
+                f"«{culture_image_candidates[0]}»."
             )
 
     # ========================================================
