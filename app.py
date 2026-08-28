@@ -30,8 +30,8 @@ pg = st.navigation([
     ),
 
     st.Page(
-        "pages/tuya_diagnostic.py",
-        title="Діагностика Tuya",
+        "pages/keruvannya_zroshennyam_modulnyi_planuvalnyk.py",
+        title="Розклад зрошення Свердловина 1",
         icon="🔎",
     ),
 ])
