@@ -54,17 +54,18 @@ def get_tuya_token():
         pass
     return None, None, None
 
-def get_device_status(device_id):
-    """Отримання статусу пристрою"""
+def get_device_details(device_id):
+    """Отримання повної інформації та статусів пристрою"""
     base_url, token, client_id = get_tuya_token()
     if not token:
-        return []
+        return {}
 
     t = str(int(time.time() * 1000))
     secret = st.secrets["tuya"]["access_key"]
     
     empty_hash = hashlib.sha256(b"").hexdigest()
-    uri = f"/v1.0/iot-03/devices/{device_id}/status"
+    # Запит деталей пристрою замість чистого status
+    uri = f"/v1.0/iot-03/devices/{device_id}"
     
     string_to_sign = client_id + token + t + "GET\n" + empty_hash + "\n\n" + uri
     sign = hmac.new(
@@ -85,10 +86,10 @@ def get_device_status(device_id):
         response = requests.get(base_url + uri, headers=headers)
         res = response.json()
         if res.get("success"):
-            return res.get("result", [])
+            return res.get("result", {})
     except Exception as e:
-        st.error(f"Помилка отримання статусу: {e}")
-    return []
+        st.error(f"Помилка отримання даних пристрою: {e}")
+    return {}
 
 def send_tuya_command(device_id, code, value):
     """Надсилання команди на пристрій"""
@@ -141,11 +142,12 @@ try:
 except Exception:
     BREAKER_ID = "bf14f332c4049e5d89xot0"
 
-statuses = get_device_status(BREAKER_ID)
+device_info = get_device_details(BREAKER_ID)
 
 with st.expander("🔍 Технічні дані пристрою від Tuya Cloud"):
-    st.write(statuses)
+    st.write(device_info)
 
+statuses = device_info.get("status", [])
 current_power_state = False
 switch_code = "switch_1"
 
