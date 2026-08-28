@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import logging
@@ -287,4 +286,3 @@ if st.button(
             st.write(
                 f"`{code}` → `{value}`"
             )
-```
