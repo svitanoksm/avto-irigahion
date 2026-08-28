@@ -32,7 +32,7 @@ def get_tuya_token():
 
     t = str(int(time.time() * 1000))
     
-    # Для отримання токена в Tuya Cloud API рядок для підпису має формуватися як: client_id + t
+    # Підпис для отримання токена: client_id + t
     message = client_id + t
     sign = hmac.new(
         client_secret.encode('utf-8'),
@@ -61,7 +61,7 @@ def get_tuya_token():
         return None, None, None
 
 def get_device_status(device_id):
-    """Отримання статусу пристрою з Tuya Cloud"""
+    """Отримання статусу пристрою з Tuya Cloud за правильним стандартом GET-запитів"""
     base_url, token, client_id = get_tuya_token()
     if not token:
         return []
@@ -69,11 +69,15 @@ def get_device_status(device_id):
     t = str(int(time.time() * 1000))
     secret = st.secrets["tuya"]["access_key"]
     
-    # Для запитів з access_token підпис формується за стандартами Tuya: client_id + token + t
-    message = client_id + token + t
+    # Для GET запитів з токеном рядок підпису Tuya: client_id + token + t + GET + \n + content_sha256 + \n + headers + \n + url
+    # Спрощений стандартний підпис для GET статусів:
+    empty_hash = hashlib.sha256(b"").hexdigest()
+    uri = f"/v1.0/iot-03/devices/{device_id}/status"
+    string_to_sign = client_id + token + t + "GET\n" + empty_hash + "\n\n" + uri
+
     sign = hmac.new(
         secret.encode('utf-8'),
-        message.encode('utf-8'),
+        string_to_sign.encode('utf-8'),
         hashlib.sha256
     ).hexdigest().upper()
 
@@ -86,7 +90,7 @@ def get_device_status(device_id):
     }
 
     try:
-        response = requests.get(f"{base_url}/v1.0/iot-03/devices/{device_id}/status", headers=headers)
+        response = requests.get(base_url + uri, headers=headers)
         res_data = response.json()
         if res_data.get("success"):
             return res_data.get("result", [])
@@ -107,7 +111,8 @@ def send_tuya_command(device_id, code, value):
     body_str = json.dumps(body)
     
     content_sha256 = hashlib.sha256(body_str.encode('utf-8')).hexdigest()
-    string_to_sign = client_id + token + t + "POST\n" + content_sha256 + "\n\n/v1.0/iot-03/devices/" + device_id + "/commands"
+    uri = f"/v1.0/iot-03/devices/{device_id}/commands"
+    string_to_sign = client_id + token + t + "POST\n" + content_sha256 + "\n\n" + uri
     
     sign = hmac.new(
         secret.encode('utf-8'),
@@ -125,7 +130,7 @@ def send_tuya_command(device_id, code, value):
     }
 
     try:
-        response = requests.post(f"{base_url}/v1.0/iot-03/devices/{device_id}/commands", headers=headers, data=body_str)
+        response = requests.post(base_url + uri, headers=headers, data=body_str)
         res_data = response.json()
         return res_data.get("success", False)
     except Exception as e:
