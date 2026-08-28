@@ -1369,9 +1369,19 @@ elif menu_option == "Полив кожної рослини":
     if not df_params.empty:
         df_params.columns = [str(c).strip() for c in df_params.columns]
 
-        mod_param_col = next((c for c in df_params.columns if "модуль" in c.lower() and "зрош" in c.lower()), None)
+        mod_param_col = next((c for c in df_params.columns if c.strip().lower() == "зрошувальний модуль"), None)
         if not mod_param_col:
-            mod_param_col = next((c for c in df_params.columns if "модуль" in c.lower()), None)
+            mod_param_col = next(
+                (c for c in df_params.columns
+                 if "модуль" in c.lower() and "зрош" in c.lower() and "id" not in c.lower()),
+                None,
+            )
+        if not mod_param_col:
+            mod_param_col = next(
+                (c for c in df_params.columns
+                 if "модуль" in c.lower() and "id" not in c.lower()),
+                None,
+            )
 
         if mod_param_col:
             matched_rows = df_params[df_params[mod_param_col].astype(str).str.strip() == str(selected_module).strip()]
