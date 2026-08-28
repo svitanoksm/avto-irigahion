@@ -1,14 +1,13 @@
 import streamlit as st
 import datetime
 import time
-import json
 import logging
 
 from tuya_connector import TuyaOpenAPI, TUYA_LOGGER
 
 
 # ============================================================
-# НАЛАШТУВАННЯ STREAMLIT
+# НАЛАШТУВАННЯ СТОРІНКИ
 # ============================================================
 
 st.set_page_config(
@@ -17,7 +16,9 @@ st.set_page_config(
     layout="wide",
 )
 
+
 st.title("🎛️ Панель керування приладами")
+
 st.markdown(
     """
     Керування обладнанням **1 свердловини**
@@ -32,7 +33,7 @@ st.markdown(
 
 def get_tuya_settings():
     """
-    Отримання параметрів Tuya із st.secrets.
+    Читає параметри Tuya з st.secrets.
     """
 
     try:
@@ -64,11 +65,12 @@ def get_tuya_settings():
     except Exception as e:
 
         st.error(
-            "❌ Не вдалося прочитати налаштування "
-            "Tuya із st.secrets."
+            "❌ Помилка читання налаштувань Tuya."
         )
 
-        st.code(str(e))
+        st.code(
+            str(e)
+        )
 
         return (
             None,
@@ -79,7 +81,7 @@ def get_tuya_settings():
 
 
 # ============================================================
-# СТВОРЕННЯ TUYA OPEN API
+# СТВОРЕННЯ ПІДКЛЮЧЕННЯ TUYA
 # ============================================================
 
 @st.cache_resource
@@ -89,15 +91,13 @@ def create_tuya_api(
     access_key
 ):
     """
-    Створення підключення до Tuya Cloud.
-
-    Використовується офіційний
-    tuya-connector-python.
+    Створює підключення до Tuya Cloud
+    через офіційний Python SDK.
     """
 
     try:
 
-        # Вмикаємо логування Tuya тільки для помилок.
+        # Не показуємо зайві службові повідомлення SDK
         TUYA_LOGGER.setLevel(
             logging.ERROR
         )
@@ -108,7 +108,7 @@ def create_tuya_api(
             access_key
         )
 
-        # Авторизація
+        # Отримання Access Token
         api.connect()
 
         return api
@@ -116,12 +116,12 @@ def create_tuya_api(
     except Exception as e:
 
         raise RuntimeError(
-            f"Помилка підключення до Tuya Cloud: {e}"
+            f"Не вдалося підключитися до Tuya Cloud: {e}"
         )
 
 
 # ============================================================
-# ІНІЦІАЛІЗАЦІЯ TUYA
+# ОТРИМАННЯ НАЛАШТУВАНЬ
 # ============================================================
 
 (
@@ -132,11 +132,19 @@ def create_tuya_api(
 ) = get_tuya_settings()
 
 
-if not ACCESS_ID or not ACCESS_KEY:
+if not ACCESS_ID:
 
     st.error(
-        "❌ Не задано Access ID або Access Secret "
-        "у st.secrets."
+        "❌ Не задано Access ID."
+    )
+
+    st.stop()
+
+
+if not ACCESS_KEY:
+
+    st.error(
+        "❌ Не задано Access Secret."
     )
 
     st.stop()
@@ -154,7 +162,7 @@ if not API_ENDPOINT:
 if not BREAKER_ID:
 
     st.error(
-        "❌ Не задано Device ID автоматичного вимикача."
+        "❌ Не задано Device ID."
     )
 
     st.stop()
@@ -172,26 +180,28 @@ try:
         ACCESS_KEY
     )
 
-    connection_ok = True
+    st.success(
+        "🟢 Підключення до Tuya Cloud успішне"
+    )
 
 except Exception as e:
 
-    connection_ok = False
-
     st.error(
-        "❌ Не вдалося підключитися до Tuya Cloud."
+        "❌ Підключення до Tuya Cloud не вдалося."
     )
 
-    st.code(str(e))
+    st.code(
+        str(e)
+    )
 
     st.info(
         """
         Перевірте:
 
         • Access ID
-        • новий Access Secret
+        • Access Secret
         • endpoint
-        • авторизацію Cloud API у Tuya Project
+        • авторизацію API у Tuya Cloud Project
         """
     )
 
@@ -199,16 +209,7 @@ except Exception as e:
 
 
 # ============================================================
-# СТАН ПІДКЛЮЧЕННЯ
-# ============================================================
-
-st.success(
-    "🟢 Підключення до Tuya Cloud успішне"
-)
-
-
-# ============================================================
-# ТЕХНІЧНА ІНФОРМАЦІЯ
+# ТЕХНІЧНІ ПАРАМЕТРИ
 # ============================================================
 
 with st.expander(
@@ -250,7 +251,7 @@ with st.expander(
 
 
 # ============================================================
-# ФУНКЦІЯ БЕЗПЕЧНОГО GET
+# ФУНКЦІЯ GET
 # ============================================================
 
 def tuya_get(
@@ -271,14 +272,14 @@ def tuya_get(
     except Exception as e:
 
         st.error(
-            f"❌ Помилка GET-запиту Tuya: {e}"
+            f"❌ Помилка GET-запиту: {e}"
         )
 
         return None
 
 
 # ============================================================
-# ФУНКЦІЯ БЕЗПЕЧНОГО POST
+# ФУНКЦІЯ POST
 # ============================================================
 
 def tuya_post(
@@ -301,7 +302,7 @@ def tuya_post(
     except Exception as e:
 
         st.error(
-            f"❌ Помилка POST-запиту Tuya: {e}"
+            f"❌ Помилка POST-запиту: {e}"
         )
 
         return None
@@ -315,23 +316,25 @@ device_uri = (
     f"/v1.0/iot-03/devices/{BREAKER_ID}"
 )
 
-device_info = tuya_get(
+device_response = tuya_get(
     device_uri
 )
 
 
-# ============================================================
-# ПЕРЕВІРКА DEVICE INFO
-# ============================================================
-
 device_data = {}
 
-if isinstance(device_info, dict):
 
-    if device_info.get("success"):
+if isinstance(
+    device_response,
+    dict
+):
+
+    if device_response.get(
+        "success"
+    ):
 
         device_data = (
-            device_info.get(
+            device_response.get(
                 "result",
                 {}
             )
@@ -349,12 +352,12 @@ if isinstance(device_info, dict):
         ):
 
             st.json(
-                device_info
+                device_response
             )
 
 
 # ============================================================
-# ЗАГОЛОВОК СВЕРДЛОВИНИ
+# ЗАГОЛОВОК
 # ============================================================
 
 st.header(
@@ -385,8 +388,8 @@ if device_data:
         "—"
     )
 
-    category = device_data.get(
-        "category",
+    category_name = device_data.get(
+        "category_name",
         "—"
     )
 
@@ -395,7 +398,9 @@ if device_data:
         False
     )
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4 = st.columns(
+        4
+    )
 
     with col1:
 
@@ -415,7 +420,7 @@ if device_data:
 
         st.metric(
             "Категорія",
-            category
+            category_name
         )
 
     with col4:
@@ -432,7 +437,6 @@ if device_data:
                 "🔴 OFFLINE"
             )
 
-
 else:
 
     st.warning(
@@ -441,7 +445,7 @@ else:
 
 
 # ============================================================
-# ПОВНА ІНФОРМАЦІЯ
+# ПОВНА ІНФОРМАЦІЯ ПРО ПРИСТРІЙ
 # ============================================================
 
 with st.expander(
@@ -477,6 +481,7 @@ functions_response = tuya_get(
 
 functions_data = []
 
+
 if isinstance(
     functions_response,
     dict
@@ -498,14 +503,14 @@ if isinstance(
 
     else:
 
-        st.error(
-            "❌ Не вдалося отримати "
+        st.warning(
+            "⚠️ Не вдалося отримати "
             "функції пристрою."
         )
 
 
 # ============================================================
-# ВІДОБРАЖЕННЯ ФУНКЦІЙ
+# ТЕХНІЧНІ ФУНКЦІЇ
 # ============================================================
 
 with st.expander(
@@ -553,15 +558,20 @@ with st.expander(
     else:
 
         st.warning(
-            "Tuya не повернула список функцій."
+            "Функції пристрою не отримані."
         )
 
 
 # ============================================================
-# АВТОМАТИЧНЕ ВИЗНАЧЕННЯ SWITCH-КОДУ
+# ВАЖЛИВО:
+# ОСНОВНИЙ КОД КЕРУВАННЯ — "switch"
 # ============================================================
 
-switch_codes = []
+SWITCH_CODE = "switch"
+
+
+# Перевіряємо, чи справді switch існує
+switch_function_exists = False
 
 
 for function in functions_data:
@@ -571,7 +581,7 @@ for function in functions_data:
             "code",
             ""
         )
-    )
+    ).strip()
 
     function_type = str(
         function.get(
@@ -580,70 +590,17 @@ for function in functions_data:
         )
     ).lower()
 
-    name = str(
-        function.get(
-            "name",
-            ""
-        )
-    ).lower()
-
-    description = str(
-        function.get(
-            "desc",
-            ""
-        )
-    ).lower()
-
-    # Основний критерій:
-    # Boolean + слово switch
     if (
-        "switch" in code.lower()
+        code == SWITCH_CODE
         and function_type == "boolean"
     ):
 
-        switch_codes.append(
-            code
-        )
-
-    elif (
-        code.lower().startswith("switch")
-    ):
-
-        switch_codes.append(
-            code
-        )
-
-
-# Прибираємо дублікати,
-# зберігаючи порядок.
-
-switch_codes = list(
-    dict.fromkeys(
-        switch_codes
-    )
-)
+        switch_function_exists = True
+        break
 
 
 # ============================================================
-# ВИБІР SWITCH
-# ============================================================
-
-selected_switch_code = None
-
-
-if switch_codes:
-
-    if "switch_1" in switch_codes:
-
-        selected_switch_code = "switch_1"
-
-    else:
-
-        selected_switch_code = switch_codes[0]
-
-
-# ============================================================
-# ПОТОЧНИЙ СТАТУС
+# ОТРИМАННЯ ПОТОЧНОГО СТАТУСУ
 # ============================================================
 
 status_uri = (
@@ -657,6 +614,7 @@ status_response = tuya_get(
 
 
 statuses = []
+
 
 if isinstance(
     status_response,
@@ -674,19 +632,50 @@ if isinstance(
 
     else:
 
-        st.error(
-            "❌ Не вдалося отримати "
+        st.warning(
+            "⚠️ Не вдалося отримати "
             "поточний статус пристрою."
         )
 
 
 # ============================================================
-# ВІДОБРАЖЕННЯ СТАТУСУ
+# ПОТОЧНИЙ СТАН SWITCH
+# ============================================================
+
+current_power_state = None
+
+
+for item in statuses:
+
+    code = str(
+        item.get(
+            "code",
+            ""
+        )
+    ).strip()
+
+    if code == SWITCH_CODE:
+
+        value = item.get(
+            "value"
+        )
+
+        if isinstance(
+            value,
+            bool
+        ):
+
+            current_power_state = value
+
+        break
+
+
+# ============================================================
+# ТЕХНІЧНИЙ СТАТУС
 # ============================================================
 
 with st.expander(
-    "📡 Поточний статус пристрою",
-    expanded=False
+    "📡 Повний статус пристрою"
 ):
 
     if statuses:
@@ -703,41 +692,7 @@ with st.expander(
 
 
 # ============================================================
-# ВИЗНАЧЕННЯ ПОТОЧНОГО СТАНУ
-# ============================================================
-
-current_power_state = None
-
-
-if selected_switch_code:
-
-    for item in statuses:
-
-        code = str(
-            item.get(
-                "code",
-                ""
-            )
-        )
-
-        if code == selected_switch_code:
-
-            value = item.get(
-                "value"
-            )
-
-            if isinstance(
-                value,
-                bool
-            ):
-
-                current_power_state = value
-
-            break
-
-
-# ============================================================
-# КЕРУВАННЯ
+# ОСНОВНИЙ БЛОК КЕРУВАННЯ
 # ============================================================
 
 st.markdown("---")
@@ -747,48 +702,32 @@ st.subheader(
 )
 
 
-# ============================================================
-# ЯКЩО SWITCH НЕ ЗНАЙДЕНИЙ
-# ============================================================
-
-if not selected_switch_code:
+if not switch_function_exists:
 
     st.error(
-        "❌ Tuya не повернула жодної функції "
-        "типу switch."
-    )
-
-    st.info(
         """
-        Це важлива інформація.
+        ❌ У пристрою не знайдено функцію
+        `switch` типу Boolean.
 
-        Якщо підключення до Tuya Cloud успішне,
-        але switch-код відсутній, пристрій може
-        використовувати інший код керування.
-
-        Подивіться блок:
-        «⚙️ Доступні функції пристрою».
+        Керування заблоковано, щоб випадково
+        не відправити команду іншому DP-коду.
         """
     )
 
 else:
 
-    # --------------------------------------------------------
-    # ІНФОРМАЦІЯ ПРО SWITCH
-    # --------------------------------------------------------
-
     st.caption(
-        f"Код керування Tuya: "
-        f"`{selected_switch_code}`"
+        "Основний DP-код керування: `switch`"
     )
 
-    col_state, col_buttons = st.columns(
+    col_state, col_control = st.columns(
         [1, 2]
     )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # ПОТОЧНИЙ СТАН
-    # --------------------------------------------------------
+    # ========================================================
 
     with col_state:
 
@@ -804,280 +743,375 @@ else:
 
         elif current_power_state is False:
 
-            st.warning(
+            st.error(
                 "🔴 ВИМКНЕНО"
             )
 
         else:
 
-            st.info(
-                "ℹ️ Стан невідомий"
+            st.warning(
+                "⚠️ Стан невідомий"
             )
 
-    # --------------------------------------------------------
-    # КНОПКИ
-    # --------------------------------------------------------
 
-    with col_buttons:
+    # ========================================================
+    # КНОПКИ
+    # ========================================================
+
+    with col_control:
 
         st.markdown(
             "##### Керування з хмари"
         )
 
-        button_on, button_off = st.columns(
+        col_on, col_off = st.columns(
             2
         )
+
 
         # ====================================================
         # УВІМКНЕННЯ
         # ====================================================
 
-        with button_on:
+        with col_on:
 
             if st.button(
                 "🟢 УВІМКНУТИ",
                 use_container_width=True,
                 type="primary",
-                key="tuya_turn_on"
+                key="breaker_switch_on"
             ):
+
+                command_uri = (
+                    f"/v1.0/iot-03/devices/"
+                    f"{BREAKER_ID}/commands"
+                )
 
                 command_body = {
                     "commands": [
                         {
-                            "code": selected_switch_code,
+                            "code": SWITCH_CODE,
                             "value": True
                         }
                     ]
                 }
 
-                command_uri = (
-                    f"/v1.0/iot-03/devices/"
-                    f"{BREAKER_ID}/commands"
-                )
-
-                st.write(
-                    "Надсилається команда:"
-                )
-
-                st.json(
-                    command_body
-                )
-
                 response = tuya_post(
                     command_uri,
                     command_body
                 )
 
-                if response:
+                if response is None:
 
-                    if response.get(
-                        "success"
-                    ):
+                    st.error(
+                        "❌ Від Tuya не отримано відповіді."
+                    )
 
-                        st.success(
-                            "✅ Команду УВІМКНЕННЯ "
-                            "прийнято Tuya."
-                        )
+                elif response.get(
+                    "success"
+                ):
 
-                        time.sleep(1)
+                    st.success(
+                        "✅ Команду УВІМКНЕННЯ "
+                        "прийнято Tuya."
+                    )
 
-                        st.rerun()
+                    # Даємо пристрою час оновити статус
+                    time.sleep(1)
 
-                    else:
+                    # Оновлюємо сторінку
+                    st.rerun()
 
-                        st.error(
-                            "❌ Tuya не прийняла "
-                            "команду."
-                        )
+                else:
 
-                        st.json(
-                            response
-                        )
+                    st.error(
+                        "❌ Tuya не прийняла "
+                        "команду УВІМКНЕННЯ."
+                    )
+
+                    st.json(
+                        response
+                    )
+
 
         # ====================================================
         # ВИМКНЕННЯ
         # ====================================================
 
-        with button_off:
+        with col_off:
 
             if st.button(
                 "🔴 ВИМКНУТИ",
                 use_container_width=True,
-                key="tuya_turn_off"
+                key="breaker_switch_off"
             ):
-
-                command_body = {
-                    "commands": [
-                        {
-                            "code": selected_switch_code,
-                            "value": False
-                        }
-                    ]
-                }
 
                 command_uri = (
                     f"/v1.0/iot-03/devices/"
                     f"{BREAKER_ID}/commands"
                 )
 
-                st.write(
-                    "Надсилається команда:"
-                )
-
-                st.json(
-                    command_body
-                )
+                command_body = {
+                    "commands": [
+                        {
+                            "code": SWITCH_CODE,
+                            "value": False
+                        }
+                    ]
+                }
 
                 response = tuya_post(
                     command_uri,
                     command_body
                 )
 
-                if response:
+                if response is None:
 
-                    if response.get(
-                        "success"
-                    ):
+                    st.error(
+                        "❌ Від Tuya не отримано відповіді."
+                    )
 
-                        st.success(
-                            "✅ Команду ВИМКНЕННЯ "
-                            "прийнято Tuya."
-                        )
+                elif response.get(
+                    "success"
+                ):
 
-                        time.sleep(1)
+                    st.success(
+                        "✅ Команду ВИМКНЕННЯ "
+                        "прийнято Tuya."
+                    )
 
-                        st.rerun()
+                    time.sleep(1)
 
-                    else:
+                    st.rerun()
 
-                        st.error(
-                            "❌ Tuya не прийняла "
-                            "команду."
-                        )
+                else:
 
-                        st.json(
-                            response
-                        )
+                    st.error(
+                        "❌ Tuya не прийняла "
+                        "команду ВИМКНЕННЯ."
+                    )
+
+                    st.json(
+                        response
+                    )
 
 
 # ============================================================
-# РУЧНЕ ТЕСТУВАННЯ
+# ДЕТАЛЬНА ІНФОРМАЦІЯ ПРО СТАН
 # ============================================================
 
 st.markdown("---")
 
 st.subheader(
-    "🧪 Тестування команди Tuya"
-)
-
-st.caption(
-    "Цей блок залишено для діагностики. "
-    "Він дозволяє вручну вибрати DP-код."
+    "📊 Показники автоматичного вимикача"
 )
 
 
-available_codes = [
-    function.get(
-        "code",
-        ""
+# Створюємо словник статусів
+status_dict = {}
+
+for item in statuses:
+
+    code = item.get(
+        "code"
     )
-    for function in functions_data
-    if function.get("code")
-]
+
+    value = item.get(
+        "value"
+    )
+
+    if code:
+
+        status_dict[code] = value
 
 
-if available_codes:
+# ============================================================
+# ОСНОВНІ ПОКАЗНИКИ
+# ============================================================
 
-    default_index = 0
+energy = status_dict.get(
+    "total_forward_energy"
+)
 
-    if selected_switch_code in available_codes:
+balance_energy = status_dict.get(
+    "balance_energy"
+)
 
-        default_index = (
-            available_codes.index(
-                selected_switch_code
+fault = status_dict.get(
+    "fault"
+)
+
+breaker_number = status_dict.get(
+    "breaker_number"
+)
+
+
+metric1, metric2, metric3, metric4 = st.columns(
+    4
+)
+
+
+with metric1:
+
+    if energy is not None:
+
+        st.metric(
+            "Загальна енергія",
+            str(energy)
+        )
+
+    else:
+
+        st.metric(
+            "Загальна енергія",
+            "—"
+        )
+
+
+with metric2:
+
+    if balance_energy is not None:
+
+        st.metric(
+            "Баланс енергії",
+            str(balance_energy)
+        )
+
+    else:
+
+        st.metric(
+            "Баланс енергії",
+            "—"
+        )
+
+
+with metric3:
+
+    if fault is not None:
+
+        if fault == 0:
+
+            st.metric(
+                "Помилка",
+                "Немає"
             )
+
+        else:
+
+            st.metric(
+                "Помилка",
+                str(fault)
+            )
+
+    else:
+
+        st.metric(
+            "Помилка",
+            "—"
         )
 
-    test_code = st.selectbox(
-        "DP-код",
-        available_codes,
-        index=default_index,
-        key="manual_test_code"
-    )
 
-    test_value = st.selectbox(
-        "Значення",
-        [True, False],
-        format_func=lambda x:
-            "🟢 True — УВІМКНУТИ"
-            if x
-            else
-            "🔴 False — ВИМКНУТИ",
-        key="manual_test_value"
-    )
+with metric4:
 
-    if st.button(
-        "🚀 Відправити тестову команду",
-        use_container_width=True,
-        key="manual_test_button"
-    ):
+    if breaker_number:
 
-        command_body = {
-            "commands": [
-                {
-                    "code": test_code,
-                    "value": test_value
-                }
-            ]
-        }
-
-        command_uri = (
-            f"/v1.0/iot-03/devices/"
-            f"{BREAKER_ID}/commands"
+        st.metric(
+            "Номер автомата",
+            str(breaker_number)
         )
+
+    else:
+
+        st.metric(
+            "Номер автомата",
+            "—"
+        )
+
+
+# ============================================================
+# СТАН ФАЗ
+# ============================================================
+
+st.markdown("---")
+
+st.subheader(
+    "📡 Статус фаз"
+)
+
+
+phase_a = status_dict.get(
+    "phase_a"
+)
+
+phase_b = status_dict.get(
+    "phase_b"
+)
+
+phase_c = status_dict.get(
+    "phase_c"
+)
+
+
+phase1, phase2, phase3 = st.columns(
+    3
+)
+
+
+with phase1:
+
+    st.markdown(
+        "**Фаза A**"
+    )
+
+    if phase_a is not None:
+
+        st.code(
+            str(phase_a)
+        )
+
+    else:
 
         st.write(
-            "### Команда"
+            "Дані відсутні"
         )
 
-        st.json(
-            command_body
-        )
 
-        response = tuya_post(
-            command_uri,
-            command_body
-        )
+with phase2:
 
-        if response:
-
-            if response.get(
-                "success"
-            ):
-
-                st.success(
-                    "✅ Tuya прийняла команду."
-                )
-
-                st.json(
-                    response
-                )
-
-            else:
-
-                st.error(
-                    "❌ Tuya повернула помилку."
-                )
-
-                st.json(
-                    response
-                )
-
-else:
-
-    st.info(
-        "Функції пристрою ще не отримані."
+    st.markdown(
+        "**Фаза B**"
     )
+
+    if phase_b is not None:
+
+        st.code(
+            str(phase_b)
+        )
+
+    else:
+
+        st.write(
+            "Дані відсутні"
+        )
+
+
+with phase3:
+
+    st.markdown(
+        "**Фаза C**"
+    )
+
+    if phase_c is not None:
+
+        st.code(
+            str(phase_c)
+        )
+
+    else:
+
+        st.write(
+            "Дані відсутні"
+        )
 
 
 # ============================================================
@@ -1095,35 +1129,46 @@ with st.form(
     key="breaker_schedule_form"
 ):
 
-    b_col1, b_col2 = st.columns(2)
+    b_col1, b_col2 = st.columns(
+        2
+    )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # ЧАС УВІМКНЕННЯ
-    # --------------------------------------------------------
+    # ========================================================
 
     with b_col1:
 
         b_on_time = st.time_input(
             "Час увімкнення",
-            datetime.time(8, 0),
+            datetime.time(
+                8,
+                0
+            ),
             key="b_on"
         )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # ЧАС ВИМКНЕННЯ
-    # --------------------------------------------------------
+    # ========================================================
 
     with b_col2:
 
         b_off_time = st.time_input(
             "Час вимкнення",
-            datetime.time(18, 0),
+            datetime.time(
+                18,
+                0
+            ),
             key="b_off"
         )
 
-    # --------------------------------------------------------
-    # ДНІ ТИЖНЯ
-    # --------------------------------------------------------
+
+    # ========================================================
+    # ДНІ
+    # ========================================================
 
     b_days = st.multiselect(
         "Дні тижня",
@@ -1144,9 +1189,10 @@ with st.form(
         key="b_days"
     )
 
-    # --------------------------------------------------------
-    # ЗБЕРЕЖЕННЯ РОЗКЛАДУ
-    # --------------------------------------------------------
+
+    # ========================================================
+    # ЗБЕРЕЖЕННЯ
+    # ========================================================
 
     if st.form_submit_button(
         "Зберегти розклад вимикача"
@@ -1162,7 +1208,9 @@ with st.form(
 
             st.info(
                 "Дні: "
-                + ", ".join(b_days)
+                + ", ".join(
+                    b_days
+                )
             )
 
         else:
@@ -1173,12 +1221,12 @@ with st.form(
 
 
 # ============================================================
-# НИЖНЯ ІНФОРМАЦІЯ
+# СИСТЕМНА ІНФОРМАЦІЯ
 # ============================================================
 
 st.markdown("---")
 
 st.caption(
-    "Tuya Cloud API • Свердловина 1 • "
-    "Система керування іригацією"
+    "Tuya Cloud • Circuit Breaker • "
+    "Свердловина 1 • Іригація"
 )
