@@ -1352,15 +1352,6 @@ elif menu_option == "Полив кожної рослини":
     # ОТРИМАННЯ ПАРАМЕТРІВ МОДУЛЯ
     # ========================================================
 
-    # ВАЖЛИВО:
-    # Тут НЕ встановлюємо 1000 дерев як запасне значення.
-    # Кількість дерев повинна визначатися виключно
-    # як:
-    #
-    # I + J + K
-    #
-    # Джифоні + Мортарела + Романо
-
     trees_count = 0
     culture_name = "Фундук"
 
@@ -1368,32 +1359,48 @@ elif menu_option == "Полив кожної рослини":
     val_mortarela = 0.0
     val_romano = 0.0
 
-
     if not df_params.empty:
+        # Очищаємо назви стовпців від зайвих пробілів
+        df_params.columns = [str(c).strip() for c in df_params.columns]
 
-        # ----------------------------------------------------
-        # Пошук стовпця з назвою модуля
-        # ----------------------------------------------------
-
-        mod_param_col = find_column(
-            df_params,
-            contains=["модуль"],
-        )
+        # Шукаємо стовпець з назвою модуля
+        mod_param_col = next((c for c in df_params.columns if "модуль" in c.lower() and "зрош" in c.lower()), None)
+        if not mod_param_col:
+            mod_param_col = next((c for c in df_params.columns if "модуль" in c.lower()), None)
 
         if mod_param_col:
+            matched_rows = df_params[df_params[mod_param_col].astype(str).str.strip() == str(selected_module).strip()]
 
-            matched_row = df_params[
-                df_params[
-                    mod_param_col
-                ]
-                .astype(str)
-                .str.strip()
-                == selected_module
-            ]
+            if not matched_rows.empty:
+                row_data = matched_rows.iloc[0]
 
-            if not matched_row.empty:
+                # Шукаємо конкретні стовпці за ключовими словами
+                col_jifoni = next((c for c in df_params.columns if "джифон" in c.lower()), None)
+                col_mortarela = next((c for c in df_params.columns if "мортарел" in c.lower()), None)
+                col_romano = next((c for c in df_params.columns if "роман" in c.lower()), None)
+                col_culture = next((c for c in df_params.columns if "культур" in c.lower()), None)
 
-                row_data = matched_row.iloc[0]
+                # Витягуємо значення Джифоні
+                if col_jifoni and col_jifoni in row_data:
+                    val_jifoni = convert_to_number(row_data[col_jifoni]) or 0.0
+
+                # Витягуємо значення Мортарела
+                if col_mortarela and col_mortarela in row_data:
+                    val_mortarela = convert_to_number(row_data[col_mortarela]) or 0.0
+
+                # Витягуємо значення Романо
+                if col_romano and col_romano in row_data:
+                    val_romano = convert_to_number(row_data[col_romano]) or 0.0
+
+                # Загальна кількість дерев
+                total_calc_trees = val_jifoni + val_mortarela + val_romano
+                trees_count = int(round(total_calc_trees)) if total_calc_trees > 0 else 0
+
+                # Культура
+                if col_culture and col_culture in row_data:
+                    c_val = str(row_data[col_culture]).strip()
+                    if c_val and c_val.lower() not in ["nan", "none", ""]:
+                        culture_name = c_val
 
 
                 # ====================================================
