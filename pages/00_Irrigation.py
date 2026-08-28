@@ -1374,135 +1374,61 @@ elif menu_option == "Полив кожної рослини":
             if not matched_rows.empty:
                 row_data = matched_rows.iloc[0]
 
-                # Найнадійніший пошук стовпців за фрагментами для конкретного рядка параметрів
+                # Шукаємо назви стовпців у таблиці параметрів за фрагментами
                 col_jifoni = next((c for c in df_params.columns if "джифон" in c.lower()), None)
                 col_mortarela = next((c for c in df_params.columns if "мортарел" in c.lower()), None)
                 col_romano = next((c for c in df_params.columns if "роман" in c.lower()), None)
                 col_culture = next((c for c in df_params.columns if "культур" in c.lower()), None)
 
-                # Витягуємо значення безпечно
+                # Витягуємо та конвертуємо значення Джифоні
                 if col_jifoni:
                     raw_val = row_data[col_jifoni]
                     if hasattr(raw_val, "iloc"):
                         raw_val = raw_val.iloc[0]
                     val_jifoni = convert_to_number(raw_val) or 0.0
 
+                # Витягуємо та конвертуємо значення Мортарела
                 if col_mortarela:
                     raw_val = row_data[col_mortarela]
                     if hasattr(raw_val, "iloc"):
                         raw_val = raw_val.iloc[0]
                     val_mortarela = convert_to_number(raw_val) or 0.0
 
+                # Витягуємо та конвертуємо значення Романо
                 if col_romano:
                     raw_val = row_data[col_romano]
                     if hasattr(raw_val, "iloc"):
                         raw_val = raw_val.iloc[0]
                     val_romano = convert_to_number(raw_val) or 0.0
 
-                if col_culture:
-                    c_val = str(row_data[col_culture]).strip()
-                    if c_val and c_val.lower() not in ["nan", "none", ""]:
-                        culture_name = c_val
-
                 # Загальна кількість дерев
                 total_calc_trees = val_jifoni + val_mortarela + val_romano
                 trees_count = int(round(total_calc_trees)) if total_calc_trees > 0 else 0
 
                 # Культура
-                if col_culture and col_culture in row_data:
+                if col_culture:
                     c_val = str(row_data[col_culture]).strip()
                     if c_val and c_val.lower() not in ["nan", "none", ""]:
                         culture_name = c_val
 
 
-                # ====================================================
-                # КІЛЬКІСТЬ ДЕРЕВ
-                # ====================================================
+    # ========================================================
+    # ПЕРЕВІРКА КІЛЬКОСТІ ДЕРЕВ
+    # ========================================================
 
-                col_jifoni = find_column(
-                    df_params,
-                    contains=["джифоні"],
-                )
+    if trees_count <= 0:
 
-                col_mortarela = find_column(
-                    df_params,
-                    contains=["мортарела"],
-                )
+        st.error(
+            "Не вдалося визначити кількість дерев "
+            f"для модуля «{selected_module}». "
+            "Перевірте стовпці "
+            "«Кількість Джифоні, шт», "
+            "«Кількість запилювача Мортарела, шт» "
+            "та «Кількість запилювача Романо, шт» "
+            "у таблиці «Параметри»."
+        )
 
-                col_romano = find_column(
-                    df_params,
-                    contains=["романо"],
-                )
-
-
-                # ----------------------------------------------------
-                # Джифоні
-                # ----------------------------------------------------
-
-                if col_jifoni:
-                    raw_val = row_data[col_jifoni]
-                    # Якщо раптом це Series, беремо перший елемент
-                    if hasattr(raw_val, "iloc"):
-                        raw_val = raw_val.iloc[0]
-                    val_jifoni = convert_to_number(raw_val)
-                    if val_jifoni is None:
-                        val_jifoni = 0.0
-                else:
-                    val_jifoni = 0.0
-
-
-                # ----------------------------------------------------
-                # Мортарела
-                # ----------------------------------------------------
-
-                if col_mortarela:
-                    raw_val = row_data[col_mortarela]
-                    if hasattr(raw_val, "iloc"):
-                        raw_val = raw_val.iloc[0]
-                    val_mortarela = convert_to_number(raw_val)
-                    if val_mortarela is None:
-                        val_mortarela = 0.0
-                else:
-                    val_mortarela = 0.0
-
-
-                # ----------------------------------------------------
-                # Романо
-                # ----------------------------------------------------
-
-                if col_romano:
-                    raw_val = row_data[col_romano]
-                    if hasattr(raw_val, "iloc"):
-                        raw_val = raw_val.iloc[0]
-                    val_romano = convert_to_number(raw_val)
-                    if val_romano is None:
-                        val_romano = 0.0
-                else:
-                    val_romano = 0.0
-
-
-                # ====================================================
-                # ГОЛОВНИЙ РОЗРАХУНОК
-                # ====================================================
-
-                total_calc_trees = (
-                    val_jifoni
-                    + val_mortarela
-                    + val_romano
-                )
-
-
-                if total_calc_trees > 0:
-
-                    trees_count = int(
-                        round(
-                            total_calc_trees
-                        )
-                    )
-
-                else:
-
-                    trees_count = 0
+        st.stop()
 
 
                 # ====================================================
