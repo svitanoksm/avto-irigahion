@@ -5,19 +5,16 @@ import altair as alt
 from google.oauth2.service_account import Credentials
 from PIL import Image
 
-st.set_page_config(
-    page_title="FMS AgronomOk - Зрошення",
-    page_icon="💧",
-    layout="wide",
-)
+# ⚠️ ВИДАЛЕНО st.set_page_config(), оскільки конфігурація задана в app.py
 
-# Навігація сторінки
+# Навігація сторінки (внутрішній селектор розділів всередині сторінки Зрошення)
 menu_option = st.sidebar.radio(
     "Розділ",
     [
         "Головна панель",
         "Поливні модулі",
         "Полив кожної рослини",
+        "Параметри полів та систем",
     ],
 )
 
@@ -27,13 +24,7 @@ menu_option = st.sidebar.radio(
 
 SPREADSHEET_NAME = "Автоматизація зрошення"
 WORKSHEET_NAME = "Свердловина 1"
-
-# Кількість дерев у модулях
-TREES_COUNT_MAP = {
-    "Модуль 1-3": 1387,
-    "Модуль 1-4": 1430,
-    "Модуль 1-5": 1376,
-}
+PARAMETERS_WORKSHEET_NAME = "Параметри"  # Назва аркуша з параметрами полів
 
 
 # ============================================================
@@ -204,12 +195,29 @@ def load_data(spreadsheet_name, worksheet_name):
     return df
 
 
+@st.cache_data(ttl=60)
+def load_parameters(spreadsheet_name, worksheet_name):
+    """Завантаження таблиці параметрів модулів та культур."""
+    try:
+        spreadsheet = client.open(spreadsheet_name)
+        sheet = spreadsheet.worksheet(worksheet_name)
+        values = sheet.get_all_values(value_render_option="FORMATTED_VALUE")
+        if not values:
+            return pd.DataFrame()
+        headers = [str(h).strip() for h in values[0]]
+        rows = values[1:]
+        return pd.DataFrame(rows, columns=headers)
+    except Exception:
+        return pd.DataFrame()
+
+
 # ============================================================
 # ЗАВАНТАЖЕННЯ ДАНИХ У ДОДАТОК
 # ============================================================
 
 try:
     df = load_data(SPREADSHEET_NAME, WORKSHEET_NAME)
+    df_params = load_parameters(SPREADSHEET_NAME, PARAMETERS_WORKSHEET_NAME)
 except Exception as e:
     st.error(f"Помилка завантаження даних з Google Таблиці: {e}")
     st.stop()
@@ -815,7 +823,41 @@ elif menu_option == "Полив кожної рослини":
 
     st.title(f"🌳 Аналітика поливу однієї рослини: {selected_module}")
 
-    trees_count = TREES_COUNT_MAP.get(selected_module, 1000)
+    # Отримання параметрів із таблиці "Параметри"
+    trees_count = 1000
+    culture_name = "Фундук"
+
+    if not df_params.empty:
+        # Шукаємо рядок, де назва модуля відповідає обраному
+        mod_param_col = find_column(df_params, contains=["модуль"])
+        if mod_param_col:
+            matched_row = df_params[
+                df_params[mod_param_col].astype(str).str.strip() == selected_module
+            ]
+            if not matched_row.empty:
+                row_data = matched_row.iloc[0]
+
+                # Зчитуємо кількість за сортами з довідника
+                col_jifoni = find_column(df_params, contains=["джифоні"])
+                col_mortarela = find_column(df_params, contains=["мортарела"])
+                col_romano = find_column(df_params, contains=["романо"])
+
+                val_jifoni = convert_to_number(row_data[col_jifoni]) if col_jifoni else 0
+                val_mortarela = convert_to_number(row_data[col_mortarela]) if col_mortarela else 0
+                val_romano = convert_to_number(row_data[col_romano]) if col_romano else 0
+
+                val_jifoni = val_jifoni or 0
+                val_mortarela = val_mortarela or 0
+                val_romano = val_romano or 0
+
+                total_calc_trees = val_jifoni + val_mortarela + val_romano
+                if total_calc_trees > 0:
+                    trees_count = int(total_calc_trees)
+
+                # Динамічне підтягування культури з довідника (наприклад, стовпець "Культура")
+                col_culture = find_column(df_params, contains=["культур"])
+                if col_culture and pd.notna(row_data[col_culture]) and str(row_data[col_culture]).strip() != "":
+                    culture_name = str(row_data[col_culture]).strip()
 
     df_filtered = df[
         df[module_col].astype(str).str.strip() == selected_module
@@ -841,7 +883,6 @@ elif menu_option == "Полив кожної рослини":
             s_dt = start_dt.replace(year=target_year)
             e_dt = end_dt.replace(year=target_year)
         except ValueError:
-            # Захист для 29 лютого у невисокосному році
             s_dt = pd.Timestamp(
                 target_year,
                 start_dt.month,
@@ -950,7 +991,7 @@ elif menu_option == "Полив кожної рослини":
     col_img, col_metrics = st.columns([1, 2], gap="large")
 
     with col_img:
-        st.markdown("### 🌿 Фундук")
+        st.markdown(f"### 🌿 {culture_name}")
 
         try:
             img = Image.open("image_693716.jpg")
@@ -1122,3 +1163,23 @@ elif menu_option == "Полив кожної рослини":
             hide_index=True,
             height=400,
         )
+
+
+# ============================================================
+# 4. ПАРАМЕТРИ ПОЛІВ ТА СИСТЕМ
+# ============================================================
+
+elif menu_option == "Параметри полів та систем":
+
+    st.title("⚙️ Параметри полів та систем")
+
+    st.write(
+        "Ви можете перейти до окремої сторінки налаштувань, "
+        "створеної у папці pages:"
+    )
+
+    st.page_link(
+        "pages/01_Field_Parameters.py",
+        label="Відкрити сторінку параметрів",
+        icon="📁",
+    )
