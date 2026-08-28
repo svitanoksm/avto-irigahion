@@ -1374,23 +1374,35 @@ elif menu_option == "Полив кожної рослини":
             if not matched_rows.empty:
                 row_data = matched_rows.iloc[0]
 
-                # Шукаємо конкретні стовпці за ключовими словами
+                # Найнадійніший пошук стовпців за фрагментами для конкретного рядка параметрів
                 col_jifoni = next((c for c in df_params.columns if "джифон" in c.lower()), None)
                 col_mortarela = next((c for c in df_params.columns if "мортарел" in c.lower()), None)
                 col_romano = next((c for c in df_params.columns if "роман" in c.lower()), None)
                 col_culture = next((c for c in df_params.columns if "культур" in c.lower()), None)
 
-                # Витягуємо значення Джифоні
-                if col_jifoni and col_jifoni in row_data:
-                    val_jifoni = convert_to_number(row_data[col_jifoni]) or 0.0
+                # Витягуємо значення безпечно
+                if col_jifoni:
+                    raw_val = row_data[col_jifoni]
+                    if hasattr(raw_val, "iloc"):
+                        raw_val = raw_val.iloc[0]
+                    val_jifoni = convert_to_number(raw_val) or 0.0
 
-                # Витягуємо значення Мортарела
-                if col_mortarela and col_mortarela in row_data:
-                    val_mortarela = convert_to_number(row_data[col_mortarela]) or 0.0
+                if col_mortarela:
+                    raw_val = row_data[col_mortarela]
+                    if hasattr(raw_val, "iloc"):
+                        raw_val = raw_val.iloc[0]
+                    val_mortarela = convert_to_number(raw_val) or 0.0
 
-                # Витягуємо значення Романо
-                if col_romano and col_romano in row_data:
-                    val_romano = convert_to_number(row_data[col_romano]) or 0.0
+                if col_romano:
+                    raw_val = row_data[col_romano]
+                    if hasattr(raw_val, "iloc"):
+                        raw_val = raw_val.iloc[0]
+                    val_romano = convert_to_number(raw_val) or 0.0
+
+                if col_culture:
+                    c_val = str(row_data[col_culture]).strip()
+                    if c_val and c_val.lower() not in ["nan", "none", ""]:
+                        culture_name = c_val
 
                 # Загальна кількість дерев
                 total_calc_trees = val_jifoni + val_mortarela + val_romano
