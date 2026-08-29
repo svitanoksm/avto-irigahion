@@ -407,7 +407,12 @@ def load_module_schedule():
 
 
 def save_module_schedule(df):
-    """Зберігає розклад, не додаючи жодних інших колонок."""
+    """Зберігає РІВНО погоджені 10 колонок.
+
+    Тривалість передається в Google Sheets як справжнє число (float),
+    а не як текст з комою. Це принципово важливо: інакше Google Sheets
+    може перетворити 1,0 / 1,05 на 10 / 105 залежно від локалі таблиці.
+    """
     try:
         worksheet = get_module_schedule_worksheet()
         if worksheet is None:
@@ -419,11 +424,50 @@ def save_module_schedule(df):
             return False
 
         values = [MODULE_SCHEDULE_COLUMNS.copy()]
-        for _, row in clean_df.iterrows():
-            values.append([safe_text(row[c]) for c in MODULE_SCHEDULE_COLUMNS])
 
+        for _, row in clean_df.iterrows():
+            out = []
+            for column in MODULE_SCHEDULE_COLUMNS:
+                value = row.get(column, "")
+
+                if column == "тривалість, годин":
+                    text = safe_text(value)
+                    if not text:
+                        out.append("")
+                    else:
+                        # Підтримуємо і 1,05, і 1.05, але в Sheets
+                        # передаємо саме число.
+                        try:
+                            number = float(text.replace(" ", "").replace(",", "."))
+                            out.append(round(number, 6))
+                        except Exception:
+                            out.append("")
+
+                elif column == "активність":
+                    out.append(normalize_activity(value))
+
+                else:
+                    out.append(safe_text(value))
+
+            values.append(out)
+
+        # Повністю переписуємо тільки погоджені 10 колонок.
+        # Інших колонок код не створює.
         worksheet.clear()
-        worksheet.update(range_name="A1", values=values)
+        worksheet.update(range_name="A1", values=values, raw=True)
+
+        # Колонка F — тривалість. Зберігаємо її числовою, але
+        # відображаємо мінімум один знак після коми: 1,0; 1,05; 2,5.
+        try:
+            worksheet.format("F2:F", {
+                "numberFormat": {
+                    "type": "NUMBER",
+                    "pattern": "0.0#",
+                }
+            })
+        except Exception as format_error:
+            logging.warning(f"Не вдалося встановити формат тривалості: {format_error}")
+
         return True
 
     except Exception as e:
@@ -677,8 +721,8 @@ def make_row(module_name, action, start_dt, duration_hours="", status="Запл�
         "дата та час початку": format_schedule_datetime(start_dt),
         "модуль": safe_text(module_name),
         "дія": normalize_action(action),
-        "тривалість, годин": (str(duration_hours).replace(".", ",") if duration_hours not in (None, "") else ""),
-        "активність": "TRUE" if active else "FALSE",
+        "тривалість, годин": (round(float(duration_hours), 6) if duration_hours not in (None, "") else ""),
+        "активність": bool(active),
         "статус": status,
         "дата та час фактичного виконання": "",
         "помилка": error,
@@ -792,61 +836,118 @@ def add_next_module_record(df, duration_hours):
 
 
 def append_user_chain_record(df, start_dt, module_name, duration_hours, next_module):
-    """Оновлює поточний автоматичний ON та створює наступні 2 записи."""
+    """
+    Продовжує ланцюг модулів.
+
+    Важливе правило:
+    1. Попередній автоматичний запис "Увімкнути" отримує тривалість.
+    2. Новий автоматичний "Увімкнути" створюється ПЕРЕД "Вимкнути"
+       попереднього модуля, тому порядок рядків відповідає порядку
+       виконання команд.
+    """
     df = prepare_dataframe(df, MODULE_SCHEDULE_COLUMNS)
     idx, _ = get_last_user_record(df)
     if idx is None:
         return False, "Немає попереднього запису."
 
-    previous = df.iloc[idx]
-    previous_finish = parse_schedule_datetime(previous.get("дата та час початку", ""))
-    try:
-        previous_finish += timedelta(hours=float(safe_text(previous.get("тривалість, годин", "0")).replace(",", ".")))
-    except Exception:
-        return False, "Некоректна тривалість попереднього запису."
+    # start_dt — кінець попереднього модуля, який UI визначив автоматично.
+    start_dt = parse_schedule_datetime(start_dt)
+    if start_dt is None:
+        return False, "Некоректна дата та час нового запису."
 
+    try:
+        duration = float(duration_hours)
+    except Exception:
+        return False, "Некоректна тривалість нового запису."
+
+    if duration <= 0:
+        return False, "Тривалість повинна бути більшою за 0."
+
+    # Знаходимо перший автоматичний ON після останнього завершеного ON.
+    # Він ще не має тривалості.
     auto_idx = None
     for j in range(idx + 1, len(df)):
-        if normalize_action(df.iloc[j].get("дія", "")) == "Увімкнути" and not safe_text(df.iloc[j].get("тривалість, годин", "")):
+        if (
+            normalize_action(df.iloc[j].get("дія", "")) == "Увімкнути"
+            and not safe_text(df.iloc[j].get("тривалість, годин", ""))
+        ):
             auto_idx = j
             break
+
     if auto_idx is None:
         return False, "Не знайдено автоматичний запис наступного модуля."
 
-    auto_start = parse_schedule_datetime(df.iloc[auto_idx].get("дата та час початку", ""))
+    auto_start = parse_schedule_datetime(
+        df.iloc[auto_idx].get("дата та час початку", "")
+    )
+    auto_module = safe_text(df.iloc[auto_idx].get("модуль", ""))
     if auto_start is None:
         return False, "Некоректний час запуску наступного модуля."
+    if not auto_module:
+        return False, "Не визначено наступний модуль."
 
-    finish = start_dt + timedelta(hours=float(duration_hours))
-    # Попередній автоматичний ON отримує повну тривалість до завершення нового користувацького запису.
+    # Кінець нового користувацького інтервалу.
+    finish = start_dt + timedelta(hours=duration)
+
+    # Тривалість автоматичного ON рахується від його реального старту
+    # до кінця нового модуля. Наприклад: 15:12 -> 16:15 = 1,05 год.
     auto_duration = (finish - auto_start).total_seconds() / 3600.0
     if auto_duration <= 0:
-        return False, "Наступний запис має бути пізніше за автоматичний запуск модуля."
-    df.at[auto_idx, "тривалість, годин"] = str(round(auto_duration, 6)).replace(".", ",")
+        return False, "Час нового запису повинен бути пізніше запуску автоматичного модуля."
 
-    # Новий OFF попереднього автоматичного модуля.
+    df.at[auto_idx, "тривалість, годин"] = round(auto_duration, 6)
+
     rows = df.to_dict(orient="records")
+
     if next_module != "Не виключати":
-        rows.append(make_row(module_name, "Вимкнути", finish, "", created_at=datetime.now(KYIV_TZ)))
+        # Спочатку УВІМКНЕННЯ наступного модуля — finish - 3 хв.
+        # Потім ВИМКНЕННЯ поточного модуля — finish.
         next_start = finish - timedelta(minutes=3)
-        rows.append(make_row(next_module, "Увімкнути", next_start, "", created_at=datetime.now(KYIV_TZ)))
-        # OFF поточного нового модуля буде створений при наступному введенні тривалості.
+        created = datetime.now(KYIV_TZ)
+
+        rows.append(
+            make_row(
+                next_module,
+                "Увімкнути",
+                next_start,
+                "",
+                created_at=created,
+            )
+        )
+        rows.append(
+            make_row(
+                auto_module,
+                "Вимкнути",
+                finish,
+                "",
+                created_at=created,
+            )
+        )
 
     return True, pd.DataFrame(rows, columns=MODULE_SCHEDULE_COLUMNS)
 
 
 def add_module_schedule_task(df, start_datetime, module_name, duration_hours, next_module):
     """Додає перший запис або продовжує існуючий ланцюг."""
-    if len(df) == 0:
-        rows = create_first_module_record(start_datetime, module_name, duration_hours, next_module)
-        return (True, pd.DataFrame(rows, columns=MODULE_SCHEDULE_COLUMNS), "Створено 3 записи.")
+    df = prepare_dataframe(df, MODULE_SCHEDULE_COLUMNS)
 
-    # start_datetime/module_name для наступного запису приходять автоматично.
+    if len(df) == 0:
+        rows = create_first_module_record(
+            start_datetime, module_name, duration_hours, next_module
+        )
+        return (
+            True,
+            pd.DataFrame(rows, columns=MODULE_SCHEDULE_COLUMNS),
+            "Створено 3 записи." if next_module != "Не виключати" else "Створено 1 запис.",
+        )
+
+    # Для наступних додавань дата/модуль визначаються автоматично.
     ok, result = append_user_chain_record(
         df, start_datetime, module_name, duration_hours, next_module
     )
     if not ok:
         return False, None, result
+
     return True, result, "Наступний запис додано."
 
 
@@ -880,7 +981,7 @@ def update_module_schedule_task(index, start_datetime, module_name, duration_hou
     df.at[index, "дата та час початку"] = format_schedule_datetime(start_datetime)
     df.at[index, "модуль"] = module_name
     df.at[index, "дія"] = normalize_action(action)
-    df.at[index, "тривалість, годин"] = str(duration_hours).replace(".", ",") if duration_hours not in (None, "") else ""
+    df.at[index, "тривалість, годин"] = round(float(duration_hours), 6) if duration_hours not in (None, "") else ""
     df.at[index, "статус"] = "Заплановано"
     df.at[index, "дата та час фактичного виконання"] = ""
     df.at[index, "помилка"] = ""
