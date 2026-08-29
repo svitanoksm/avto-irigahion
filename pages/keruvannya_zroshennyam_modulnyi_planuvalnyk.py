@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import time
@@ -3006,4 +3005,3 @@ if st.button(
 ):
 
     st.rerun()
-```
