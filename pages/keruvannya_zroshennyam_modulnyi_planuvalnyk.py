@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import time
@@ -25,6 +26,12 @@ MAX_SCHEDULES = 30
 TIMEZONE_ID = "Europe/Kyiv"
 SCHEDULER_INTERVAL_SECONDS = 10
 
+# Кількість хвилин передпуску наступного модуля.
+# Наприклад:
+# поточний модуль завершується 10:00
+# наступний запускається 09:57
+PRESTART_MINUTES = 3
+
 SPREADSHEET_URL = (
     "https://docs.google.com/spreadsheets/d/"
     "1qF-7THB566lqOyQV0f6xuB052IRHh8s4CHMUpuN82P4/"
@@ -48,7 +55,7 @@ WEEKDAYS = [
 
 
 # ============================================================
-# СТРУКТУРА НОВОГО РОЗКЛАДУ МОДУЛІВ
+# СТРУКТУРА РОЗКЛАДУ МОДУЛІВ
 # ============================================================
 
 MODULE_SCHEDULE_COLUMNS = [
@@ -181,6 +188,7 @@ st.markdown(
 # ============================================================
 
 def safe_text(value):
+
     if value is None:
         return ""
 
@@ -194,6 +202,7 @@ def safe_text(value):
 
 
 def parse_schedule_datetime(value):
+
     if isinstance(value, pd.Timestamp):
         parsed = value.to_pydatetime()
 
@@ -204,6 +213,7 @@ def parse_schedule_datetime(value):
         return None
 
     else:
+
         text = safe_text(value)
 
         if not text:
@@ -216,6 +226,7 @@ def parse_schedule_datetime(value):
         )
 
         if pd.isna(parsed):
+
             parsed = pd.to_datetime(
                 text,
                 errors="coerce",
@@ -228,23 +239,32 @@ def parse_schedule_datetime(value):
         parsed = parsed.to_pydatetime()
 
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=KYIV_TZ)
+        parsed = parsed.replace(
+            tzinfo=KYIV_TZ
+        )
+
     else:
-        parsed = parsed.astimezone(KYIV_TZ)
+        parsed = parsed.astimezone(
+            KYIV_TZ
+        )
 
     return parsed
 
 
 def format_schedule_datetime(value):
+
     parsed = parse_schedule_datetime(value)
 
     if parsed is None:
         return safe_text(value)
 
-    return parsed.strftime("%Y-%m-%d %H:%M:%S")
+    return parsed.strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
 
 def normalize_action(value):
+
     text = safe_text(value).lower()
 
     if text in [
@@ -271,6 +291,7 @@ def normalize_action(value):
 
 
 def normalize_activity(value):
+
     if isinstance(value, bool):
         return value
 
@@ -290,35 +311,25 @@ def normalize_activity(value):
 
 
 def normalize_duration(value):
-    """
-    Перетворює тривалість у числове значення годин.
-
-    Важливо:
-    0,016 -> 0.016
-    24 -> 24.0
-    """
 
     text = safe_text(value)
 
     if not text:
         return None
 
-    text = text.replace(",", ".")
+    text = text.replace(
+        ",",
+        ".",
+    )
 
     try:
         return float(text)
+
     except Exception:
         return None
 
 
 def format_duration(value):
-    """
-    Форматує тривалість без зайвих нулів.
-
-    1.0   -> 1
-    24.0  -> 24
-    0.016 -> 0.016
-    """
 
     number = normalize_duration(value)
 
@@ -328,7 +339,11 @@ def format_duration(value):
     if number.is_integer():
         return str(int(number))
 
-    return f"{number:.6f}".rstrip("0").rstrip(".")
+    return (
+        f"{number:.6f}"
+        .rstrip("0")
+        .rstrip(".")
+    )
 
 
 # ============================================================
@@ -336,23 +351,32 @@ def format_duration(value):
 # ============================================================
 
 def generate_unique_id(existing_ids=None):
-    """
-    Створює ID у форматі:
-
-    YYYY-MM-DD HH:MM:SS
-
-    Якщо такий ID вже існує, додаємо секунду,
-    поки не отримаємо унікальний ID.
-    """
 
     existing_ids = existing_ids or set()
 
-    candidate = datetime.now(KYIV_TZ).replace(microsecond=0)
+    candidate = (
+        datetime.now(
+            KYIV_TZ
+        )
+        .replace(
+            microsecond=0
+        )
+    )
 
-    while candidate.strftime("%Y-%m-%d %H:%M:%S") in existing_ids:
-        candidate += timedelta(seconds=1)
+    while (
+        candidate.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        in existing_ids
+    ):
 
-    return candidate.strftime("%Y-%m-%d %H:%M:%S")
+        candidate += timedelta(
+            seconds=1
+        )
+
+    return candidate.strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
 
 # ============================================================
@@ -373,15 +397,21 @@ def init_google_sheets():
             return None
 
         creds_dict = dict(
-            st.secrets["gcp_service_account"]
+            st.secrets[
+                "gcp_service_account"
+            ]
         )
 
-        credentials = Credentials.from_service_account_info(
-            creds_dict,
-            scopes=scope,
+        credentials = (
+            Credentials.from_service_account_info(
+                creds_dict,
+                scopes=scope,
+            )
         )
 
-        client = gspread.authorize(credentials)
+        client = gspread.authorize(
+            credentials
+        )
 
         return client.open_by_url(
             SPREADSHEET_URL
@@ -390,7 +420,8 @@ def init_google_sheets():
     except Exception as e:
 
         st.error(
-            "❌ Не вдалося підключитися до Google Таблиці."
+            "❌ Не вдалося підключитися "
+            "до Google Таблиці."
         )
 
         st.code(str(e))
@@ -407,12 +438,15 @@ def get_worksheet(name):
         if spreadsheet is None:
             return None
 
-        return spreadsheet.worksheet(name)
+        return spreadsheet.worksheet(
+            name
+        )
 
     except gspread.WorksheetNotFound:
 
         st.error(
-            f"❌ Не знайдено аркуш «{name}»."
+            f"❌ Не знайдено аркуш "
+            f"«{name}»."
         )
 
         return None
@@ -420,7 +454,8 @@ def get_worksheet(name):
     except Exception as e:
 
         st.error(
-            f"❌ Помилка відкриття аркуша «{name}»."
+            f"❌ Помилка відкриття "
+            f"аркуша «{name}»."
         )
 
         st.code(str(e))
@@ -429,12 +464,14 @@ def get_worksheet(name):
 
 
 def get_schedule_worksheet():
+
     return get_worksheet(
         SCHEDULE_WORKSHEET_NAME
     )
 
 
 def get_module_schedule_worksheet():
+
     return get_worksheet(
         MODULE_SCHEDULE_WORKSHEET_NAME
     )
@@ -444,28 +481,47 @@ def get_module_schedule_worksheet():
 # DATAFRAME
 # ============================================================
 
-def prepare_dataframe(df, columns):
+def prepare_dataframe(
+    df,
+    columns,
+):
 
     if df is None:
+
         return pd.DataFrame(
-            {c: [] for c in columns},
+            {
+                c: []
+                for c in columns
+            },
             dtype="object",
         )
 
     try:
+
         if df.empty:
+
             return pd.DataFrame(
-                {c: [] for c in columns},
+                {
+                    c: []
+                    for c in columns
+                },
                 dtype="object",
             )
+
     except Exception:
+
         return pd.DataFrame(
-            {c: [] for c in columns},
+            {
+                c: []
+                for c in columns
+            },
             dtype="object",
         )
 
     result = pd.DataFrame(
-        index=range(len(df))
+        index=range(
+            len(df)
+        )
     )
 
     for column in columns:
@@ -479,9 +535,13 @@ def prepare_dataframe(df, columns):
 
         else:
 
-            result[column] = [""] * len(df)
+            result[column] = [
+                ""
+            ] * len(df)
 
-    return result.reset_index(drop=True)
+    return result.reset_index(
+        drop=True
+    )
 
 
 # ============================================================
@@ -492,14 +552,22 @@ def load_schedule():
 
     try:
 
-        worksheet = get_schedule_worksheet()
+        worksheet = (
+            get_schedule_worksheet()
+        )
 
         if worksheet is None:
+
             return pd.DataFrame(
-                {c: [] for c in REQUIRED_SCHEDULE_COLUMNS}
+                {
+                    c: []
+                    for c in REQUIRED_SCHEDULE_COLUMNS
+                }
             )
 
-        records = worksheet.get_all_records()
+        records = (
+            worksheet.get_all_records()
+        )
 
         return prepare_dataframe(
             pd.DataFrame(records)
@@ -511,13 +579,17 @@ def load_schedule():
     except Exception as e:
 
         st.error(
-            "❌ Помилка завантаження розкладу."
+            "❌ Помилка завантаження "
+            "розкладу."
         )
 
         st.code(str(e))
 
         return pd.DataFrame(
-            {c: [] for c in REQUIRED_SCHEDULE_COLUMNS}
+            {
+                c: []
+                for c in REQUIRED_SCHEDULE_COLUMNS
+            }
         )
 
 
@@ -525,7 +597,9 @@ def save_schedule(df):
 
     try:
 
-        worksheet = get_schedule_worksheet()
+        worksheet = (
+            get_schedule_worksheet()
+        )
 
         if worksheet is None:
             return False
@@ -538,8 +612,8 @@ def save_schedule(df):
         if len(clean_df) > MAX_SCHEDULES:
 
             st.error(
-                f"❌ Максимальна кількість завдань — "
-                f"{MAX_SCHEDULES}."
+                f"❌ Максимальна кількість "
+                f"завдань — {MAX_SCHEDULES}."
             )
 
             return False
@@ -567,7 +641,8 @@ def save_schedule(df):
     except Exception as e:
 
         st.error(
-            "❌ Помилка збереження розкладу."
+            "❌ Помилка збереження "
+            "розкладу."
         )
 
         st.code(str(e))
@@ -583,23 +658,35 @@ def load_module_schedule():
 
     try:
 
-        worksheet = get_module_schedule_worksheet()
+        worksheet = (
+            get_module_schedule_worksheet()
+        )
 
         if worksheet is None:
 
             return pd.DataFrame(
-                {c: [] for c in MODULE_SCHEDULE_COLUMNS}
+                {
+                    c: []
+                    for c in MODULE_SCHEDULE_COLUMNS
+                }
             )
 
-        records = worksheet.get_all_records()
+        records = (
+            worksheet.get_all_records()
+        )
 
         if not records:
 
             return pd.DataFrame(
-                {c: [] for c in MODULE_SCHEDULE_COLUMNS}
+                {
+                    c: []
+                    for c in MODULE_SCHEDULE_COLUMNS
+                }
             )
 
-        raw_df = pd.DataFrame(records)
+        raw_df = pd.DataFrame(
+            records
+        )
 
         # ----------------------------------------------------
         # ПІДТРИМКА СТАРОЇ СТРУКТУРИ
@@ -622,29 +709,40 @@ def load_module_schedule():
                     existing_ids
                 )
 
-                existing_ids.add(new_id)
+                existing_ids.add(
+                    new_id
+                )
 
                 row["ID"] = new_id
 
-                row["ID наступного запису"] = ""
+                row[
+                    "ID наступного запису"
+                ] = ""
 
                 old_start = safe_text(
                     old.get(
                         "дата та час початку",
-                        old.get("час", ""),
+                        old.get(
+                            "час",
+                            "",
+                        ),
                     )
                 )
 
-                parsed_start = parse_schedule_datetime(
-                    old_start
+                parsed_start = (
+                    parse_schedule_datetime(
+                        old_start
+                    )
                 )
 
                 if parsed_start:
 
                     row[
                         "дата та час початку"
-                    ] = format_schedule_datetime(
-                        parsed_start
+                    ] = (
+                        format_schedule_datetime(
+                            parsed_start
+                        )
                     )
 
                 else:
@@ -654,11 +752,17 @@ def load_module_schedule():
                     ] = old_start
 
                 row["модуль"] = safe_text(
-                    old.get("модуль", "")
+                    old.get(
+                        "модуль",
+                        "",
+                    )
                 )
 
                 row["дія"] = normalize_action(
-                    old.get("дія", "")
+                    old.get(
+                        "дія",
+                        "",
+                    )
                 )
 
                 row[
@@ -751,24 +855,25 @@ def load_module_schedule():
                     )
                 )
 
-                rows.append(row)
+                rows.append(
+                    row
+                )
 
             migrated_df = pd.DataFrame(
                 rows,
                 columns=MODULE_SCHEDULE_COLUMNS,
             )
 
-            # Зв'язуємо старі записи послідовно.
             for i in range(
                 len(migrated_df) - 1
             ):
 
                 migrated_df.at[
                     i,
-                    "ID наступного запису"
+                    "ID наступного запису",
                 ] = migrated_df.at[
                     i + 1,
-                    "ID"
+                    "ID",
                 ]
 
             return migrated_df
@@ -782,12 +887,13 @@ def load_module_schedule():
             MODULE_SCHEDULE_COLUMNS,
         )
 
-        # Нормалізація тривалості.
         result[
             "тривалість, годин"
         ] = result[
             "тривалість, годин"
-        ].apply(format_duration)
+        ].apply(
+            format_duration
+        )
 
         return result
 
@@ -801,7 +907,10 @@ def load_module_schedule():
         st.code(str(e))
 
         return pd.DataFrame(
-            {c: [] for c in MODULE_SCHEDULE_COLUMNS}
+            {
+                c: []
+                for c in MODULE_SCHEDULE_COLUMNS
+            }
         )
 
 
@@ -813,7 +922,9 @@ def save_module_schedule(df):
 
     try:
 
-        worksheet = get_module_schedule_worksheet()
+        worksheet = (
+            get_module_schedule_worksheet()
+        )
 
         if worksheet is None:
             return False
@@ -826,44 +937,53 @@ def save_module_schedule(df):
         if len(clean_df) > MAX_SCHEDULES:
 
             st.error(
-                f"❌ Максимальна кількість завдань — "
-                f"{MAX_SCHEDULES}."
+                f"❌ Максимальна кількість "
+                f"завдань — {MAX_SCHEDULES}."
             )
 
             return False
 
-        # Нормалізація ID.
         existing_ids = set()
 
-        for i in range(len(clean_df)):
+        for i in range(
+            len(clean_df)
+        ):
 
             current_id = safe_text(
-                clean_df.at[i, "ID"]
+                clean_df.at[
+                    i,
+                    "ID",
+                ]
             )
 
             if not current_id:
 
-                current_id = generate_unique_id(
-                    existing_ids
+                current_id = (
+                    generate_unique_id(
+                        existing_ids
+                    )
                 )
 
                 clean_df.at[
                     i,
-                    "ID"
+                    "ID",
                 ] = current_id
 
-            existing_ids.add(current_id)
+            existing_ids.add(
+                current_id
+            )
 
-        # Нормалізація тривалості.
-        for i in range(len(clean_df)):
+        for i in range(
+            len(clean_df)
+        ):
 
             clean_df.at[
                 i,
-                "тривалість, годин"
+                "тривалість, годин",
             ] = format_duration(
                 clean_df.at[
                     i,
-                    "тривалість, годин"
+                    "тривалість, годин",
                 ]
             )
 
@@ -910,46 +1030,57 @@ def get_tuya_settings():
         conf = st.secrets["tuya"]
 
         return {
-            "access_id": safe_text(
-                conf["access_id"]
-            ),
 
-            "access_key": safe_text(
-                conf["access_key"]
-            ),
+            "access_id":
+                safe_text(
+                    conf["access_id"]
+                ),
 
-            "endpoint": safe_text(
-                conf["endpoint"]
-            ).rstrip("/"),
+            "access_key":
+                safe_text(
+                    conf["access_key"]
+                ),
 
-            "breaker": safe_text(
-                conf["breaker_device_id"]
-            ),
+            "endpoint":
+                safe_text(
+                    conf["endpoint"]
+                ).rstrip("/"),
 
-            "relay_group": safe_text(
-                conf["relay_group_device_id"]
-            ),
+            "breaker":
+                safe_text(
+                    conf["breaker_device_id"]
+                ),
 
-            "relay_5": safe_text(
-                conf.get(
-                    "relay_5_device_id",
-                    "",
-                )
-            ),
+            "relay_group":
+                safe_text(
+                    conf[
+                        "relay_group_device_id"
+                    ]
+                ),
 
-            "relay_6": safe_text(
-                conf.get(
-                    "relay_6_device_id",
-                    "",
-                )
-            ),
+            "relay_5":
+                safe_text(
+                    conf.get(
+                        "relay_5_device_id",
+                        "",
+                    )
+                ),
 
-            "relay_7": safe_text(
-                conf.get(
-                    "relay_7_device_id",
-                    "",
-                )
-            ),
+            "relay_6":
+                safe_text(
+                    conf.get(
+                        "relay_6_device_id",
+                        "",
+                    )
+                ),
+
+            "relay_7":
+                safe_text(
+                    conf.get(
+                        "relay_7_device_id",
+                        "",
+                    )
+                ),
         }
 
     except Exception as e:
@@ -964,19 +1095,41 @@ def get_tuya_settings():
         st.stop()
 
 
-TUYA_SETTINGS = get_tuya_settings()
+TUYA_SETTINGS = (
+    get_tuya_settings()
+)
 
-ACCESS_ID = TUYA_SETTINGS["access_id"]
-ACCESS_KEY = TUYA_SETTINGS["access_key"]
-API_ENDPOINT = TUYA_SETTINGS["endpoint"]
+ACCESS_ID = (
+    TUYA_SETTINGS["access_id"]
+)
 
-BREAKER_ID = TUYA_SETTINGS["breaker"]
+ACCESS_KEY = (
+    TUYA_SETTINGS["access_key"]
+)
 
-RELAY_GROUP_ID = TUYA_SETTINGS["relay_group"]
+API_ENDPOINT = (
+    TUYA_SETTINGS["endpoint"]
+)
 
-RELAY_5_ID = TUYA_SETTINGS["relay_5"]
-RELAY_6_ID = TUYA_SETTINGS["relay_6"]
-RELAY_7_ID = TUYA_SETTINGS["relay_7"]
+BREAKER_ID = (
+    TUYA_SETTINGS["breaker"]
+)
+
+RELAY_GROUP_ID = (
+    TUYA_SETTINGS["relay_group"]
+)
+
+RELAY_5_ID = (
+    TUYA_SETTINGS["relay_5"]
+)
+
+RELAY_6_ID = (
+    TUYA_SETTINGS["relay_6"]
+)
+
+RELAY_7_ID = (
+    TUYA_SETTINGS["relay_7"]
+)
 
 
 @st.cache_resource
@@ -1027,6 +1180,7 @@ def tuya_get(uri):
         return None
 
     try:
+
         return tuya.get(uri)
 
     except Exception as e:
@@ -1038,12 +1192,16 @@ def tuya_get(uri):
         return None
 
 
-def tuya_post(uri, body):
+def tuya_post(
+    uri,
+    body,
+):
 
     if tuya is None:
         return None
 
     try:
+
         return tuya.post(
             uri,
             body,
@@ -1058,12 +1216,16 @@ def tuya_post(uri, body):
         return None
 
 
-def get_device_status(device_id):
+def get_device_status(
+    device_id,
+):
 
     if not TUYA_CONNECTED:
         return None
 
-    device_id = safe_text(device_id)
+    device_id = safe_text(
+        device_id
+    )
 
     if not device_id:
         return None
@@ -1073,7 +1235,10 @@ def get_device_status(device_id):
         f"{device_id}/status"
     )
 
-    if not isinstance(response, dict):
+    if not isinstance(
+        response,
+        dict,
+    ):
         return None
 
     if not response.get(
@@ -1089,7 +1254,10 @@ def get_device_status(device_id):
 
     return (
         result
-        if isinstance(result, list)
+        if isinstance(
+            result,
+            list,
+        )
         else None
     )
 
@@ -1108,15 +1276,25 @@ def get_code_value(
     for item in statuses:
 
         if (
-            isinstance(item, dict)
-            and item.get("code") == code
+            isinstance(
+                item,
+                dict,
+            )
+            and item.get(
+                "code"
+            ) == code
         ):
-            return item.get("value")
+
+            return item.get(
+                "value"
+            )
 
     return None
 
 
-def set_switch_state(state):
+def set_switch_state(
+    state,
+):
 
     if (
         not TUYA_CONNECTED
@@ -1139,7 +1317,10 @@ def set_switch_state(state):
     )
 
     return (
-        isinstance(response, dict)
+        isinstance(
+            response,
+            dict,
+        )
         and bool(
             response.get(
                 "success",
@@ -1205,7 +1386,10 @@ def set_relay_state(
     )
 
     return (
-        isinstance(response, dict)
+        isinstance(
+            response,
+            dict,
+        )
         and bool(
             response.get(
                 "success",
@@ -1216,7 +1400,7 @@ def set_relay_state(
 
 
 def get_relay_state_by_module(
-    module_name
+    module_name,
 ):
 
     config = MODULE_CONFIG.get(
@@ -1226,9 +1410,11 @@ def get_relay_state_by_module(
     if not config:
         return None
 
-    device_id = TUYA_SETTINGS.get(
-        config["device_id_key"],
-        "",
+    device_id = (
+        TUYA_SETTINGS.get(
+            config["device_id_key"],
+            "",
+        )
     )
 
     if not device_id:
@@ -1243,7 +1429,10 @@ def get_relay_state_by_module(
 
     return (
         value
-        if isinstance(value, bool)
+        if isinstance(
+            value,
+            bool,
+        )
         else None
     )
 
@@ -1261,9 +1450,11 @@ def set_module_state(
     if not config:
         return False
 
-    device_id = TUYA_SETTINGS.get(
-        config["device_id_key"],
-        "",
+    device_id = (
+        TUYA_SETTINGS.get(
+            config["device_id_key"],
+            "",
+        )
     )
 
     if not device_id:
@@ -1293,15 +1484,19 @@ def calculate_schedule_times(
     next_module,
 ):
 
-    start_dt = parse_schedule_datetime(
-        start_dt
+    start_dt = (
+        parse_schedule_datetime(
+            start_dt
+        )
     )
 
     if start_dt is None:
         return None, None, None
 
-    duration = normalize_duration(
-        duration_hours
+    duration = (
+        normalize_duration(
+            duration_hours
+        )
     )
 
     if duration is None:
@@ -1309,6 +1504,10 @@ def calculate_schedule_times(
 
     if duration <= 0:
         return None, None, None
+
+    # --------------------------------------------------------
+    # ПЛАНОВЕ ЗАВЕРШЕННЯ ПОТОЧНОГО МОДУЛЯ
+    # --------------------------------------------------------
 
     finish_dt = (
         start_dt
@@ -1325,17 +1524,35 @@ def calculate_schedule_times(
             None,
         )
 
+    # --------------------------------------------------------
+    # ПЕРЕДПУСК НАСТУПНОГО МОДУЛЯ
+    #
+    # Наприклад:
+    #
+    # старт поточного: 09:00
+    # тривалість: 1 год
+    # завершення: 10:00
+    #
+    # наступний старт:
+    # 10:00 - 3 хв = 09:57
+    # --------------------------------------------------------
+
     next_start_dt = (
         finish_dt
         - timedelta(
-            minutes=3
+            minutes=PRESTART_MINUTES
         )
     )
+
+    # Поточний модуль вимикається
+    # у своє планове завершення.
+
+    current_off_dt = finish_dt
 
     return (
         finish_dt,
         next_start_dt,
-        finish_dt,
+        current_off_dt,
     )
 
 
@@ -1344,7 +1561,7 @@ def calculate_schedule_times(
 # ============================================================
 
 def get_next_module_schedule_values(
-    df
+    df,
 ):
 
     if df.empty:
@@ -1364,50 +1581,78 @@ def get_next_module_schedule_values(
 
     previous = df.iloc[-1]
 
-    previous_start = parse_schedule_datetime(
-        previous.get(
-            "дата та час початку",
-            "",
+    previous_finish = (
+        parse_schedule_datetime(
+            previous.get(
+                "дата та час завершення",
+                "",
+            )
         )
     )
 
-    previous_finish = parse_schedule_datetime(
-        previous.get(
-            "дата та час завершення",
-            "",
+    previous_start = (
+        parse_schedule_datetime(
+            previous.get(
+                "дата та час початку",
+                "",
+            )
         )
     )
+
+    # --------------------------------------------------------
+    # ОСНОВА ДЛЯ НАСТУПНОГО ЗАПИСУ
+    #
+    # Якщо попередній модуль закінчується
+    # о 10:00, наступний починається
+    # о 09:57.
+    # --------------------------------------------------------
 
     if previous_finish is not None:
 
-        start_dt = previous_finish
+        start_dt = (
+            previous_finish
+            - timedelta(
+                minutes=PRESTART_MINUTES
+            )
+        )
 
     elif previous_start is not None:
 
-        duration = normalize_duration(
-            previous.get(
-                "тривалість, годин",
-                "0",
+        duration = (
+            normalize_duration(
+                previous.get(
+                    "тривалість, годин",
+                    "0",
+                )
             )
         )
 
         if duration is None:
             duration = 0.0
 
-        start_dt = (
+        previous_finish = (
             previous_start
             + timedelta(
                 hours=duration
             )
         )
 
+        start_dt = (
+            previous_finish
+            - timedelta(
+                minutes=PRESTART_MINUTES
+            )
+        )
+
     else:
 
-        start_dt = datetime.now(
-            KYIV_TZ
-        ).replace(
-            second=0,
-            microsecond=0,
+        start_dt = (
+            datetime.now(
+                KYIV_TZ
+            ).replace(
+                second=0,
+                microsecond=0,
+            )
         )
 
     next_module = safe_text(
@@ -1434,7 +1679,9 @@ def get_next_module_schedule_values(
 # ОНОВЛЕННЯ ID-ЗВ'ЯЗКІВ
 # ============================================================
 
-def rebuild_next_record_links(df):
+def rebuild_next_record_links(
+    df,
+):
 
     df = prepare_dataframe(
         df,
@@ -1444,17 +1691,19 @@ def rebuild_next_record_links(df):
     if df.empty:
         return df
 
-    for i in range(len(df)):
+    for i in range(
+        len(df)
+    ):
 
         if i < len(df) - 1:
 
             df.at[
                 i,
-                "ID наступного запису"
+                "ID наступного запису",
             ] = safe_text(
                 df.at[
                     i + 1,
-                    "ID"
+                    "ID",
                 ]
             )
 
@@ -1462,7 +1711,7 @@ def rebuild_next_record_links(df):
 
             df.at[
                 i,
-                "ID наступного запису"
+                "ID наступного запису",
             ] = ""
 
     return df
@@ -1493,19 +1742,24 @@ def add_module_schedule_task(
             f"{MAX_SCHEDULES} завдань.",
         )
 
-    start_datetime = parse_schedule_datetime(
-        start_datetime
+    start_datetime = (
+        parse_schedule_datetime(
+            start_datetime
+        )
     )
 
     if start_datetime is None:
 
         return (
             False,
-            "Некоректна дата та час початку.",
+            "Некоректна дата "
+            "та час початку.",
         )
 
-    duration = normalize_duration(
-        duration_hours
+    duration = (
+        normalize_duration(
+            duration_hours
+        )
     )
 
     if duration is None:
@@ -1531,12 +1785,14 @@ def add_module_schedule_task(
             "більшою за 24 години.",
         )
 
-    finish_dt, next_start_dt, current_off_dt = (
-        calculate_schedule_times(
-            start_datetime,
-            duration,
-            next_module,
-        )
+    (
+        finish_dt,
+        next_start_dt,
+        current_off_dt,
+    ) = calculate_schedule_times(
+        start_datetime,
+        duration,
+        next_module,
     )
 
     if finish_dt is None:
@@ -1569,19 +1825,29 @@ def add_module_schedule_task(
         "ID наступного запису":
             "",
 
+        # ----------------------------------------------------
+        # САМЕ ТУТ ЗАПИСУЄМО ЧАС ПЕРЕДПУСКУ
+        # ----------------------------------------------------
+
         "дата та час початку":
             format_schedule_datetime(
                 start_datetime
             ),
 
         "модуль":
-            safe_text(module_name),
+            safe_text(
+                module_name
+            ),
 
         "дія":
-            normalize_action(action),
+            normalize_action(
+                action
+            ),
 
         "тривалість, годин":
-            format_duration(duration),
+            format_duration(
+                duration
+            ),
 
         "дата та час завершення":
             format_schedule_datetime(
@@ -1589,7 +1855,9 @@ def add_module_schedule_task(
             ),
 
         "наступний модуль":
-            safe_text(next_module),
+            safe_text(
+                next_module
+            ),
 
         "дата та час запуску наступного модуля":
             (
@@ -1638,11 +1906,6 @@ def add_module_schedule_task(
         columns=MODULE_SCHEDULE_COLUMNS,
     )
 
-    # --------------------------------------------------------
-    # ВАЖЛИВО:
-    # ID наступного запису попереднього запису
-    # --------------------------------------------------------
-
     new_df = rebuild_next_record_links(
         new_df
     )
@@ -1669,7 +1932,7 @@ def add_module_schedule_task(
 # ============================================================
 
 def delete_module_schedule_task(
-    index
+    index,
 ):
 
     df = prepare_dataframe(
@@ -1785,15 +2048,19 @@ def update_module_schedule_task(
     ):
         return False
 
-    start_datetime = parse_schedule_datetime(
-        start_datetime
+    start_datetime = (
+        parse_schedule_datetime(
+            start_datetime
+        )
     )
 
     if start_datetime is None:
         return False
 
-    duration = normalize_duration(
-        duration_hours
+    duration = (
+        normalize_duration(
+            duration_hours
+        )
     )
 
     if duration is None:
@@ -1805,20 +2072,18 @@ def update_module_schedule_task(
     if duration > 24:
         return False
 
-    finish_dt, next_start_dt, current_off_dt = (
-        calculate_schedule_times(
-            start_datetime,
-            duration,
-            next_module,
-        )
+    (
+        finish_dt,
+        next_start_dt,
+        current_off_dt,
+    ) = calculate_schedule_times(
+        start_datetime,
+        duration,
+        next_module,
     )
 
     if finish_dt is None:
         return False
-
-    # --------------------------------------------------------
-    # ID СТАРОГО ЗАПИСУ ЗАЛИШАЄМО
-    # --------------------------------------------------------
 
     old = df.iloc[index]
 
@@ -1831,7 +2096,10 @@ def update_module_schedule_task(
 
     row = {
         c: safe_text(
-            old.get(c, "")
+            old.get(
+                c,
+                "",
+            )
         )
         for c in MODULE_SCHEDULE_COLUMNS
     }
@@ -1847,13 +2115,19 @@ def update_module_schedule_task(
             ),
 
         "модуль":
-            safe_text(module_name),
+            safe_text(
+                module_name
+            ),
 
         "дія":
-            normalize_action(action),
+            normalize_action(
+                action
+            ),
 
         "тривалість, годин":
-            format_duration(duration),
+            format_duration(
+                duration
+            ),
 
         "дата та час завершення":
             format_schedule_datetime(
@@ -1861,7 +2135,9 @@ def update_module_schedule_task(
             ),
 
         "наступний модуль":
-            safe_text(next_module),
+            safe_text(
+                next_module
+            ),
 
         "дата та час запуску наступного модуля":
             (
@@ -1973,14 +2249,16 @@ def update_record_execution_by_id(
 
         df.at[
             index,
-            "статус"
-        ] = safe_text(status)
+            "статус",
+        ] = safe_text(
+            status
+        )
 
     if actual_on is not None:
 
         df.at[
             index,
-            "дата та час фактичного запуску"
+            "дата та час фактичного запуску",
         ] = format_schedule_datetime(
             actual_on
         )
@@ -1989,7 +2267,7 @@ def update_record_execution_by_id(
 
         df.at[
             index,
-            "дата та час фактичного вимкнення"
+            "дата та час фактичного вимкнення",
         ] = format_schedule_datetime(
             actual_off
         )
@@ -1998,8 +2276,10 @@ def update_record_execution_by_id(
 
         df.at[
             index,
-            "помилка"
-        ] = safe_text(error)
+            "помилка",
+        ] = safe_text(
+            error
+        )
 
     return save_module_schedule(
         df
@@ -2007,7 +2287,7 @@ def update_record_execution_by_id(
 
 
 # ============================================================
-# ВИКОНАННЯ ЗАПЛАНОВАНОГО ЗАПИСУ
+# ВИКОНАННЯ ВЛАСНОГО ЗАПЛАНОВАНОГО ЗАПИСУ
 # ============================================================
 
 def execute_module_schedule_task(
@@ -2042,10 +2322,12 @@ def execute_module_schedule_task(
             "У запису відсутній ID.",
         )
 
-    start_dt = parse_schedule_datetime(
-        row.get(
-            "дата та час початку",
-            "",
+    start_dt = (
+        parse_schedule_datetime(
+            row.get(
+                "дата та час початку",
+                "",
+            )
         )
     )
 
@@ -2062,8 +2344,12 @@ def execute_module_schedule_task(
     )
 
     # --------------------------------------------------------
-    # КРИТИЧНО:
-    # ЗАПУСК ТІЛЬКИ У ВІДПОВІДНОМУ ЧАСОВОМУ ВІКНІ
+    # ВАЖЛИВО:
+    # ВЛАСНИЙ ЧАС ПОЧАТКУ ТЕПЕР Є ЧАСОМ
+    # ФАКТИЧНОГО ПУСКУ.
+    #
+    # Тому передпуск 09:57 буде виконаний
+    # саме о 09:57, а не о 10:00.
     # --------------------------------------------------------
 
     if now < start_dt:
@@ -2073,9 +2359,17 @@ def execute_module_schedule_task(
             "Ще не настав час запуску.",
         )
 
+    # --------------------------------------------------------
+    # Захист від запуску дуже старого запису.
+    #
+    # Вікно запуску — 1 хвилина.
+    # --------------------------------------------------------
+
     if now >= (
         start_dt
-        + timedelta(minutes=1)
+        + timedelta(
+            minutes=1
+        )
     ):
 
         return (
@@ -2115,10 +2409,12 @@ def execute_module_schedule_task(
         )
     )
 
-    duration_hours = normalize_duration(
-        row.get(
-            "тривалість, годин",
-            "0",
+    duration_hours = (
+        normalize_duration(
+            row.get(
+                "тривалість, годин",
+                "0",
+            )
         )
     )
 
@@ -2189,11 +2485,6 @@ def execute_module_schedule_task(
             f"{module_name}.",
         )
 
-    # --------------------------------------------------------
-    # ЗАПИСУЄМО ФАКТИЧНИЙ ЗАПУСК
-    # САМЕ ЗА ID
-    # --------------------------------------------------------
-
     update_record_execution_by_id(
         record_id=record_id,
         actual_on=now,
@@ -2210,7 +2501,7 @@ def execute_module_schedule_task(
 
 
 # ============================================================
-# ВИКОНАННЯ НАСТУПНИХ ЗАПИСІВ
+# ЗАПУСК НАСТУПНОГО ЗАПИСУ
 # ============================================================
 
 def execute_next_record_if_needed(
@@ -2235,7 +2526,6 @@ def execute_next_record_if_needed(
     if not current_id or not next_id:
         return []
 
-
     next_start_text = safe_text(
         current_row.get(
             "дата та час запуску наступного модуля",
@@ -2243,21 +2533,27 @@ def execute_next_record_if_needed(
         )
     )
 
-    next_start_dt = parse_schedule_datetime(
-        next_start_text
+    next_start_dt = (
+        parse_schedule_datetime(
+            next_start_text
+        )
     )
 
     if next_start_dt is None:
         return []
 
-
     # --------------------------------------------------------
-    # НІЯКОГО ПЕРЕДЧАСНОГО ЗАПУСКУ
+    # ЧЕКАЄМО САМЕ ДО ЧАСУ ПЕРЕДПУСКУ.
+    #
+    # Наприклад:
+    #
+    # next_start_dt = 09:57
+    #
+    # О 09:57 запускаємо наступний модуль.
     # --------------------------------------------------------
 
     if now < next_start_dt:
         return []
-
 
     df = prepare_dataframe(
         load_module_schedule(),
@@ -2270,12 +2566,12 @@ def execute_next_record_if_needed(
     )
 
     if next_index is None:
+
         return [
             f"⚠️ Не знайдено "
             f"наступний запис "
             f"ID {next_id}."
         ]
-
 
     next_row = df.iloc[
         next_index
@@ -2298,33 +2594,28 @@ def execute_next_record_if_needed(
     if not next_activity:
         return []
 
-
     if next_status not in (
         "",
         "Заплановано",
     ):
         return []
 
-
     # --------------------------------------------------------
-    # ДОДАТКОВА ПЕРЕВІРКА:
-    # ВЛАСНИЙ ЧАС НАСТУПНОГО ЗАПИСУ
+    # КРИТИЧНО:
+    #
+    # РАНІШЕ ТУТ БУЛА ПЕРЕВІРКА:
+    #
+    # next_record_start = 10:00
+    # if now < next_record_start:
+    #     return []
+    #
+    # Саме вона блокувала передпуск 09:57.
+    #
+    # ТЕПЕР ЦІЄЇ ПЕРЕВІРКИ НЕМАЄ.
+    #
+    # ЄДИНИЙ ЧАС ДЛЯ ЗАПУСКУ —
+    # "дата та час запуску наступного модуля".
     # --------------------------------------------------------
-
-    next_record_start = parse_schedule_datetime(
-        next_row.get(
-            "дата та час початку",
-            "",
-        )
-    )
-
-    if next_record_start is None:
-        return []
-
-
-    if now < next_record_start:
-        return []
-
 
     next_module = safe_text(
         next_row.get(
@@ -2333,16 +2624,36 @@ def execute_next_record_if_needed(
         )
     )
 
-    duration_hours = normalize_duration(
-        next_row.get(
-            "тривалість, годин",
-            "0",
+    if next_module not in MODULE_CONFIG:
+
+        update_record_execution_by_id(
+            record_id=next_id,
+            status="Помилка",
+            error=(
+                f"Невідомий модуль "
+                f"«{next_module}»."
+            ),
+        )
+
+        return [
+            f"❌ Невідомий модуль "
+            f"{next_module}."
+        ]
+
+    duration_hours = (
+        normalize_duration(
+            next_row.get(
+                "тривалість, годин",
+                "0",
+            )
         )
     )
 
     if duration_hours is None:
         return []
 
+    if duration_hours <= 0:
+        return []
 
     duration_seconds = max(
         1,
@@ -2354,13 +2665,11 @@ def execute_next_record_if_needed(
         ),
     )
 
-
     success = set_module_state(
         next_module,
         True,
         duration_seconds,
     )
-
 
     if not success:
 
@@ -2380,12 +2689,6 @@ def execute_next_record_if_needed(
             f"{next_module}."
         ]
 
-
-    # --------------------------------------------------------
-    # ФАКТИЧНИЙ ЗАПУСК:
-    # САМЕ ID НАСТУПНОГО ЗАПИСУ
-    # --------------------------------------------------------
-
     update_record_execution_by_id(
         record_id=next_id,
         actual_on=now,
@@ -2393,11 +2696,11 @@ def execute_next_record_if_needed(
         error="",
     )
 
-
     return [
         f"🟢 {next_module} "
         f"увімкнено за ID "
-        f"{next_id}."
+        f"{next_id} "
+        f"о {now.strftime('%H:%M:%S')}."
     ]
 
 
@@ -2420,7 +2723,6 @@ def execute_current_record_off(
     if not record_id:
         return []
 
-
     next_module = safe_text(
         row.get(
             "наступний модуль",
@@ -2431,7 +2733,6 @@ def execute_current_record_off(
     if next_module == "Не виключати":
         return []
 
-
     off_text = safe_text(
         row.get(
             "дата та час вимкнення поточного модуля",
@@ -2439,17 +2740,17 @@ def execute_current_record_off(
         )
     )
 
-    off_dt = parse_schedule_datetime(
-        off_text
+    off_dt = (
+        parse_schedule_datetime(
+            off_text
+        )
     )
 
     if off_dt is None:
         return []
 
-
     if now < off_dt:
         return []
-
 
     status = safe_text(
         row.get(
@@ -2458,11 +2759,8 @@ def execute_current_record_off(
         )
     )
 
-    # Вимикаємо тільки якщо поточний запис
-    # реально виконувався.
     if status != "Виконується":
         return []
-
 
     module_name = safe_text(
         row.get(
@@ -2475,7 +2773,6 @@ def execute_current_record_off(
         module_name,
         False,
     )
-
 
     if not success:
 
@@ -2495,12 +2792,6 @@ def execute_current_record_off(
             f"{module_name}."
         ]
 
-
-    # --------------------------------------------------------
-    # ФАКТИЧНЕ ВИМКНЕННЯ:
-    # САМЕ ID ПОТОЧНОГО ЗАПИСУ
-    # --------------------------------------------------------
-
     update_record_execution_by_id(
         record_id=record_id,
         actual_off=now,
@@ -2508,10 +2799,10 @@ def execute_current_record_off(
         error="",
     )
 
-
     return [
         f"🔴 {module_name} "
-        f"вимкнено."
+        f"вимкнено "
+        f"о {now.strftime('%H:%M:%S')}."
     ]
 
 
@@ -2535,38 +2826,35 @@ def run_module_scheduler():
     if df.empty:
         return results
 
-
     # --------------------------------------------------------
-    # 1. ПЕРШЕ:
-    # ВИМИКАЄМО ПОТОЧНІ МОДУЛІ,
-    # ЯКЩО НАСТАВ ЇХ ЧАС
+    # 1. СПОЧАТКУ ВИМИКАЄМО ПОТОЧНІ МОДУЛІ
     # --------------------------------------------------------
 
     for _, row in df.iterrows():
 
-        messages = execute_current_record_off(
-            row,
-            now,
+        messages = (
+            execute_current_record_off(
+                row,
+                now,
+            )
         )
 
         results.extend(
             messages
         )
 
-
     # --------------------------------------------------------
-    # 2. ПОТОМ:
-    # ЗАПУСКАЄМО НАСТУПНІ ЗА ID
+    # 2. ПЕРЕЧИТУЄМО ТАБЛИЦЮ
     # --------------------------------------------------------
-
-    # Перечитуємо таблицю,
-    # бо попередні операції могли
-    # змінити статуси.
 
     df = prepare_dataframe(
         load_module_schedule(),
         MODULE_SCHEDULE_COLUMNS,
     )
+
+    # --------------------------------------------------------
+    # 3. ЗАПУСКАЄМО ЗАПЛАНОВАНІ МОДУЛІ
+    # --------------------------------------------------------
 
     for _, row in df.iterrows():
 
@@ -2578,21 +2866,24 @@ def run_module_scheduler():
         ):
             continue
 
-
-        # ----------------------------------------------------
-        # Запуск самого запису
-        # ----------------------------------------------------
-
-        start_dt = parse_schedule_datetime(
-            row.get(
-                "дата та час початку",
-                "",
+        start_dt = (
+            parse_schedule_datetime(
+                row.get(
+                    "дата та час початку",
+                    "",
+                )
             )
         )
 
         if start_dt is None:
             continue
 
+        # ----------------------------------------------------
+        # ВЛАСНИЙ ЧАС СТАРТУ.
+        #
+        # Для наступного модуля це вже
+        # час передпуску.
+        # ----------------------------------------------------
 
         if (
             now >= start_dt
@@ -2641,20 +2932,23 @@ def run_module_scheduler():
                             message
                         )
 
-
         # ----------------------------------------------------
-        # Запуск наступного запису
+        # 4. ДОДАТКОВО ОБРОБЛЯЄМО НАСТУПНИЙ ЗАПИС
+        #
+        # Це забезпечує запуск за
+        # "дата та час запуску наступного модуля".
         # ----------------------------------------------------
 
-        messages = execute_next_record_if_needed(
-            row,
-            now,
+        messages = (
+            execute_next_record_if_needed(
+                row,
+                now,
+            )
         )
 
         results.extend(
             messages
         )
-
 
     return results
 
@@ -2668,23 +2962,32 @@ def run_module_scheduler():
 )
 def scheduler_fragment():
 
-    results = run_module_scheduler()
+    results = (
+        run_module_scheduler()
+    )
 
     for message in results:
 
-        if message.startswith("❌"):
+        if message.startswith(
+            "❌"
+        ):
+
             st.error(
                 f"⏱️ Планувальник: "
                 f"{message}"
             )
 
-        elif message.startswith("⚠️"):
+        elif message.startswith(
+            "⚠️"
+        ):
+
             st.warning(
                 f"⏱️ Планувальник: "
                 f"{message}"
             )
 
         else:
+
             st.success(
                 f"⏱️ Планувальник: "
                 f"{message}"
@@ -2732,7 +3035,6 @@ st.subheader(
     "🚰 Свердловина №1"
 )
 
-
 current_state = get_code_value(
     get_device_status(
         BREAKER_ID
@@ -2740,11 +3042,11 @@ current_state = get_code_value(
     "switch",
 )
 
-
-state_col, control_col = st.columns(
-    [1, 2]
+state_col, control_col = (
+    st.columns(
+        [1, 2]
+    )
 )
-
 
 with state_col:
 
@@ -2777,21 +3079,22 @@ with control_col:
         "#### Керування"
     )
 
-    new_breaker_state = st.toggle(
-        "Автоматичний вимикач",
+    new_breaker_state = (
+        st.toggle(
+            "Автоматичний вимикач",
 
-        value=(
-            current_state
-            if isinstance(
-                current_state,
-                bool,
-            )
-            else False
-        ),
+            value=(
+                current_state
+                if isinstance(
+                    current_state,
+                    bool,
+                )
+                else False
+            ),
 
-        key="breaker_toggle",
+            key="breaker_toggle",
+        )
     )
-
 
     if (
         isinstance(
@@ -2837,22 +3140,18 @@ st.subheader(
     "⏰ Розклад роботи модулів"
 )
 
-
 st.caption(
-    "Дата та час першого запуску "
-    "задаються користувачем. "
-    "Для наступних записів дата/час "
-    "і модуль автоматично беруться "
-    "з попереднього запису. "
-    "ID кожного запису унікальний."
+    "Наступний модуль запускається "
+    f"на {PRESTART_MINUTES} хвилини раніше "
+    "завершення поточного модуля. "
+    "Це забезпечує перекриття модулів "
+    "перед перемиканням."
 )
-
 
 module_df = prepare_dataframe(
     load_module_schedule(),
     MODULE_SCHEDULE_COLUMNS,
 )
-
 
 st.write(
     f"Створено модулів у ланцюжку: "
@@ -2874,7 +3173,6 @@ if len(module_df) < MAX_SCHEDULES:
         module_df
     )
 
-
     with st.expander(
         "➕ Додати модуль у розклад",
         expanded=True,
@@ -2893,11 +3191,9 @@ if len(module_df) < MAX_SCHEDULES:
                     "та модуль."
                 )
 
-
                 first_col1, first_col2 = (
                     st.columns(2)
                 )
-
 
                 with first_col1:
 
@@ -2905,15 +3201,16 @@ if len(module_df) < MAX_SCHEDULES:
                         st.datetime_input(
                             "Дата та час старту",
 
-                            value=datetime.now(
-                                KYIV_TZ
-                            ).replace(
-                                second=0,
-                                microsecond=0,
+                            value=(
+                                datetime.now(
+                                    KYIV_TZ
+                                ).replace(
+                                    second=0,
+                                    microsecond=0,
+                                )
                             ),
                         )
                     )
-
 
                 with first_col2:
 
@@ -2936,7 +3233,6 @@ if len(module_df) < MAX_SCHEDULES:
                     default_module
                 )
 
-
                 st.info(
                     f"Автоматично: старт "
                     f"**{format_schedule_datetime(module_time)}**, "
@@ -2944,9 +3240,7 @@ if len(module_df) < MAX_SCHEDULES:
                     f"**{module_name}**."
                 )
 
-
             action = "Увімкнути"
-
 
             duration_hours = (
                 st.number_input(
@@ -2961,7 +3255,6 @@ if len(module_df) < MAX_SCHEDULES:
                 )
             )
 
-
             next_module = (
                 st.selectbox(
                     "Наступний модуль",
@@ -2971,21 +3264,19 @@ if len(module_df) < MAX_SCHEDULES:
                     index=0,
 
                     help=(
-                        "«Не виключати» означає: "
-                        "після завершення заданої "
-                        "тривалості поточний модуль "
-                        "НЕ вимикається і наступний "
-                        "модуль НЕ вмикається."
+                        "Наступний модуль "
+                        "буде запущено "
+                        f"на {PRESTART_MINUTES} хвилини "
+                        "раніше завершення "
+                        "поточного модуля."
                     ),
                 )
             )
-
 
             st.caption(
                 "Активність задається "
                 "автоматично."
             )
-
 
             submitted = (
                 st.form_submit_button(
@@ -2996,7 +3287,6 @@ if len(module_df) < MAX_SCHEDULES:
                     type="primary",
                 )
             )
-
 
             if submitted:
 
@@ -3009,7 +3299,6 @@ if len(module_df) < MAX_SCHEDULES:
                         next_module=next_module,
                     )
                 )
-
 
                 if result:
 
@@ -3039,7 +3328,6 @@ st.markdown("---")
 st.subheader(
     "📋 Ланцюжок модулів"
 )
-
 
 if module_df.empty:
 
@@ -3124,6 +3412,13 @@ else:
             )
         )
 
+        next_start_display = safe_text(
+            row.get(
+                "дата та час запуску наступного модуля",
+                "",
+            )
+        )
+
         status_display = safe_text(
             row.get(
                 "статус",
@@ -3137,7 +3432,6 @@ else:
                 "",
             )
         )
-
 
         with st.container(
             border=True
@@ -3155,13 +3449,11 @@ else:
                 )
             )
 
-
             with c1:
 
                 st.markdown(
                     f"### {index + 1}"
                 )
-
 
             with c2:
 
@@ -3174,7 +3466,6 @@ else:
                     f"{schedule_time}"
                 )
 
-
             with c3:
 
                 st.markdown(
@@ -3185,7 +3476,6 @@ else:
                     "Тривалість"
                 )
 
-
             with c4:
 
                 st.markdown(
@@ -3195,7 +3485,6 @@ else:
                 st.caption(
                     next_module or "—"
                 )
-
 
             with c5:
 
@@ -3211,11 +3500,9 @@ else:
                         "⏸️ Неактивний"
                     )
 
-
             st.caption(
                 f"ID: `{record_id}`"
             )
-
 
             if next_record_id:
 
@@ -3230,7 +3517,6 @@ else:
                     "ID наступного запису: —"
                 )
 
-
             if finish_display:
 
                 st.caption(
@@ -3238,6 +3524,12 @@ else:
                     f"{finish_display}"
                 )
 
+            if next_start_display:
+
+                st.caption(
+                    "Передпуск наступного: "
+                    f"{next_start_display}"
+                )
 
             if status_display:
 
@@ -3246,14 +3538,12 @@ else:
                     f"{status_display}"
                 )
 
-
             if last_execution:
 
                 st.caption(
                     "Фактичний запуск: "
                     f"{last_execution}"
                 )
-
 
             if actual_off_display:
 
@@ -3262,7 +3552,6 @@ else:
                     f"{actual_off_display}"
                 )
 
-
             if error_display:
 
                 st.error(
@@ -3270,11 +3559,9 @@ else:
                     f"{error_display}"
                 )
 
-
             b1, b2, b3 = st.columns(
                 3
             )
-
 
             with b1:
 
@@ -3318,7 +3605,6 @@ else:
 
                             st.rerun()
 
-
             with b2:
 
                 if st.button(
@@ -3337,7 +3623,6 @@ else:
                     ] = True
 
                     st.rerun()
-
 
             with b3:
 
@@ -3358,7 +3643,6 @@ else:
 
                         st.rerun()
 
-
             # =================================================
             # РЕДАГУВАННЯ
             # =================================================
@@ -3371,7 +3655,6 @@ else:
                 st.markdown(
                     "#### ✏️ Редагування"
                 )
-
 
                 parsed_datetime = (
                     parse_schedule_datetime(
@@ -3388,7 +3671,6 @@ else:
                     )
                 )
 
-
                 current_module = (
                     module_name
                     if module_name
@@ -3398,14 +3680,12 @@ else:
                     )[0]
                 )
 
-
                 current_next = (
                     next_module
                     if next_module
                     in NEXT_MODULE_OPTIONS
                     else "Не виключати"
                 )
-
 
                 current_duration = (
                     normalize_duration(
@@ -3420,7 +3700,6 @@ else:
 
                     current_duration = 1.0
 
-
                 edit_duration_value = min(
                     max(
                         current_duration,
@@ -3428,7 +3707,6 @@ else:
                     ),
                     24.0,
                 )
-
 
                 with st.form(
                     key=(
@@ -3447,7 +3725,6 @@ else:
                         )
                     )
 
-
                     edit_module = (
                         st.selectbox(
                             "Модуль",
@@ -3464,12 +3741,10 @@ else:
                         )
                     )
 
-
                     st.info(
                         "Дія автоматично: "
                         "Увімкнути"
                     )
-
 
                     edit_duration = (
                         st.number_input(
@@ -3488,7 +3763,6 @@ else:
                         )
                     )
 
-
                     edit_next = (
                         st.selectbox(
                             "Наступний модуль",
@@ -3503,11 +3777,9 @@ else:
                         )
                     )
 
-
                     ec1, ec2 = (
                         st.columns(2)
                     )
-
 
                     with ec1:
 
@@ -3521,7 +3793,6 @@ else:
                             )
                         )
 
-
                     with ec2:
 
                         cancel_edit = (
@@ -3531,7 +3802,6 @@ else:
                                 use_container_width=True,
                             )
                         )
-
 
                     if save_edit:
 
@@ -3549,7 +3819,6 @@ else:
                             ] = False
 
                             st.rerun()
-
 
                     if cancel_edit:
 
@@ -3570,13 +3839,13 @@ st.subheader(
     "🎛️ Керування модулями"
 )
 
-
 for module_name, config in MODULE_CONFIG.items():
 
-    state = get_relay_state_by_module(
-        module_name
+    state = (
+        get_relay_state_by_module(
+            module_name
+        )
     )
-
 
     with st.container(
         border=True
@@ -3588,7 +3857,6 @@ for module_name, config in MODULE_CONFIG.items():
             f'</div>',
             unsafe_allow_html=True,
         )
-
 
         if state is True:
 
@@ -3608,7 +3876,6 @@ for module_name, config in MODULE_CONFIG.items():
                 "⚠️ Стан недоступний"
             )
 
-
         desired = st.toggle(
             "Увімкнено",
 
@@ -3626,7 +3893,6 @@ for module_name, config in MODULE_CONFIG.items():
                 f"{module_name}"
             ),
         )
-
 
         if (
             isinstance(
@@ -3667,7 +3933,7 @@ for module_name, config in MODULE_CONFIG.items():
 
 
 # ============================================================
-# ІНФОРМАЦІЯ ПРО ЛАНЦЮЖОК
+# ІНФОРМАЦІЯ ПРО ЛАНЦЮЖКИ
 # ============================================================
 
 st.markdown("---")
@@ -3675,7 +3941,6 @@ st.markdown("---")
 st.subheader(
     "🔗 Зв'язки записів"
 )
-
 
 if module_df.empty:
 
@@ -3713,3 +3978,4 @@ if st.button(
 ):
 
     st.rerun()
+```
