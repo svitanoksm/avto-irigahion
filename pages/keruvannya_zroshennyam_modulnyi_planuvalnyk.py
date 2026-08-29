@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import time
@@ -3942,4 +3941,3 @@ for module_name, config in MODULE_CONFIG.items():
                     f"змінити стан "
                     f"{module_name}."
                 )
-```
