@@ -1604,7 +1604,7 @@ else:
                     if save_edit:
                         if update_module_schedule_task(
                             index=index,
-                            schedule_time=edit_time,
+                            start_datetime=edit_time,
                             module_name=edit_module,
                             action="Увімкнути",
                             duration_hours=edit_duration,
