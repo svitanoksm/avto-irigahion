@@ -25,7 +25,7 @@ pg = st.navigation([
 
     st.Page(
         "pages/02_Irrigation_Control.py",
-        title="Керування приладами",
+        title="Керування Свердловинами",
         icon="🎛️",
     ),
 
