@@ -13,17 +13,11 @@ st.set_page_config(
 pg = st.navigation([
     st.Page(
         "pages/00_Irrigation.py",
-        title="Зрошення",
+        title="Аналітика зрошення",
         icon="💧",
     ),
 
-    st.Page(
-        "pages/01_Field_Parameters.py",
-        title="Параметри полів",
-        icon="⚙️",
-    ),
-
-    st.Page(
+     st.Page(
         "pages/02_Irrigation_Control.py",
         title="Керування Свердловинами",
         icon="🎛️",
@@ -33,6 +27,12 @@ pg = st.navigation([
         "pages/keruvannya_zroshennyam_modulnyi_planuvalnyk.py",
         title="Розклад зрошення Свердловина 1",
         icon="🔎",
+    ),
+
+    st.Page(
+        "pages/01_Field_Parameters.py",
+        title="Параметри полів",
+        icon="⚙️",
     ),
 ])
 
