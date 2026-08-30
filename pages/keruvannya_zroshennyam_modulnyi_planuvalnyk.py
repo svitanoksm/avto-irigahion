@@ -147,20 +147,15 @@ st.markdown(
     <style>
 
     div[data-testid="stCheckbox"] > label {
-        font-size: 1.15rem !important;
-    }
+    font-size: 1.15rem !important;
+}
 
-    div[data-testid="stCheckbox"] > label > div:first-child {
-        transform: scale(2.8);
-        transform-origin: left center;
-        margin-right: 32px;
-    }
-
-    div[data-testid="stCheckbox"] {
-        padding-top: 14px;
-        padding-bottom: 14px;
-        min-height: 65px;
-    }
+div[data-testid="stCheckbox"] {
+    zoom: 1.8;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    min-height: 65px;
+}
 
     .relay-title {
         font-size: 1.35rem;
