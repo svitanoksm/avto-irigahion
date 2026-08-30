@@ -42,8 +42,30 @@ def load_data_from_gsheets():
             return pd.DataFrame()
         
         worksheet = sh.worksheet(WORKSHEET_NAME)
-        data = worksheet.get_all_records()
-        df = pd.DataFrame(data)
+
+        # Забираємо "сирі" значення, без форматування під локаль таблиці
+        all_values = worksheet.get_all_values(value_render_option="UNFORMATTED_VALUE")
+
+        if not all_values:
+            return pd.DataFrame()
+
+        headers = all_values[0]
+        rows = all_values[1:]
+        df = pd.DataFrame(rows, columns=headers)
+
+        # Явно приводимо числові колонки до float/int, щоб Streamlit не гадав сам
+        numeric_cols = [
+            "Площа, га",
+            "Проектна продуктивність зрошення, куб. м./га",
+            "Рік посадки",
+            "Кількість Сортових дерев, шт",
+            "Кількість запилювача 1, шт",
+            "Кількість запилювача 2, шт",
+        ]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
         return df
     except Exception as e:
         st.error(f"Помилка завантаження даних із Google Таблиці: {e}")
