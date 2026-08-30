@@ -3048,92 +3048,103 @@ st.subheader(
 )
 
 
-for module_name in MODULE_CONFIG:
+module_names = list(MODULE_CONFIG.keys())
 
-    state = get_relay_state_by_module(
-        module_name
-    )
+# Розбиваємо модулі на ряди по 3.
+for row_start in range(0, len(module_names), 3):
 
-    with st.container(
-        border=True
-    ):
+    row_modules = module_names[row_start : row_start + 3]
 
-        st.markdown(
-            f'<div class="relay-title">'
-            f"🔌 {module_name}"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+    cols = st.columns(3)
 
-        if state is True:
+    for col, module_name in zip(cols, row_modules):
 
-            st.success(
-                "🟢 Зараз УВІМКНЕНО"
+        with col:
+
+            state = get_relay_state_by_module(
+                module_name
             )
 
-        elif state is False:
-
-            st.error(
-                "🔴 Зараз ВИМКНЕНО"
-            )
-
-        else:
-
-            st.warning(
-                "⚠️ Стан недоступний"
-            )
-
-        desired = st.toggle(
-            "Увімкнено",
-            value=(
-                state
-                if isinstance(
-                    state,
-                    bool,
-                )
-                else False
-            ),
-            key=f"manual_{module_name}",
-        )
-
-        if (
-            isinstance(
-                state,
-                bool,
-            )
-            and desired != state
-        ):
-
-            if set_module_state(
-                module_name,
-                desired,
+            with st.container(
+                border=True
             ):
 
-                st.success(
-                    (
-                        "🟢 Увімкнено "
-                        f"{module_name}."
+                st.markdown(
+                    f'<div class="relay-title">'
+                    f"🔌 {module_name}"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+                if state is True:
+
+                    st.success(
+                        "🟢 Зараз УВІМКНЕНО"
                     )
-                    if desired
-                    else
-                    (
-                        "🔴 Вимкнено "
-                        f"{module_name}."
+
+                elif state is False:
+
+                    st.error(
+                        "🔴 Зараз ВИМКНЕНО"
                     )
+
+                else:
+
+                    st.warning(
+                        "⚠️ Стан недоступний"
+                    )
+
+                desired = st.toggle(
+                    "Увімкнено",
+                    value=(
+                        state
+                        if isinstance(
+                            state,
+                            bool,
+                        )
+                        else False
+                    ),
+                    key=f"manual_{module_name}",
                 )
 
-                time.sleep(
-                    0.4
-                )
+                if (
+                    isinstance(
+                        state,
+                        bool,
+                    )
+                    and desired != state
+                ):
 
-                st.rerun()
+                    if set_module_state(
+                        module_name,
+                        desired,
+                    ):
 
-            else:
+                        st.success(
+                            (
+                                "🟢 Увімкнено "
+                                f"{module_name}."
+                            )
+                            if desired
+                            else
+                            (
+                                "🔴 Вимкнено "
+                                f"{module_name}."
+                            )
+                        )
 
-                st.error(
-                    f"❌ Не вдалося змінити стан "
-                    f"{module_name}."
-                )
+                        time.sleep(
+                            0.4
+                        )
+
+                        st.rerun()
+
+                    else:
+
+                        st.error(
+                            f"❌ Не вдалося змінити стан "
+                            f"{module_name}."
+                        )
 
 
 # ============================================================
